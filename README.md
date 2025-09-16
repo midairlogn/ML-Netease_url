@@ -41,6 +41,8 @@ python main.py --mode gui --url <网易云音乐地址> --level <音质参数>
 
 #### API 模式
 
+默认端口为`6969`。
+
 ```bash
 python main.py --mode api
 ```

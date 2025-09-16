@@ -627,11 +627,32 @@
                 ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
                 ap.list.clear();
                 for(const song of ml_song_list){
-                    const response = await $.post(ml_get_song_info_real_url, { url: song.id, level: ml_selected_level, type: 'json' });
-                    console.log(response);
-                    if (response.status === 200) {
+                    let currentTry = 0;
+                    let songAdded = false;
+                    let response = null;
+                    while(currentTry <= ml_max_try_times && !songAdded){
+                        try {
+                            console.log(`尝试获取歌曲信息：${song.name} (尝试次数: ${currentTry + 1}/${ml_max_try_times + 1})`);
+                            response = await $.post(ml_get_song_info_real_url, { url: song.id, level: ml_selected_level, type: 'json' });
+                            if(response.status === 200){
+                                console.log(`成功获取歌曲信息：${song.name}\n`, response);
+                                songAdded = true;
+                            } else {
+                                console.error(`获取歌曲 ${song.name} 失败 (尝试 ${currentTry + 1}/${ml_max_try_times + 1}): ${response.msg}`);
+                                currentTry++;
+                                // 可选：延迟，避免高频请求
+                                // await sleep(1000);
+                            }
+                        } catch(error) {
+                            console.error(`请求歌曲 ${song.name} 时发生网络错误或异常 (尝试 ${currentTry + 1}/${ml_max_try_times + 1}):`, error);
+                            currentTry++;
+                            // 可选：延迟
+                            // await sleep(1000);
+                        }
+                    }
+                    if(songAdded && response){
                         let processedLyrics = response.lyric;
-                        if (response.tlyric) {
+                        if(response.tlyric){
                             processedLyrics = lrctran(response.lyric, response.tlyric);
                         }
                         ml_song_detailed = {
@@ -643,12 +664,17 @@
                             lrc: processedLyrics
                         };
                         ap.list.add(ml_song_detailed);
+                        console.log(`歌曲 ${song.name} 已成功添加到播放列表。`);
                     } else {
-                        console.error(`Error fetching song ${song.name}: ${response.msg}`);
+                        console.warn(`歌曲 ${song.name} 达到最大重试次数 (${ml_max_try_times + 1} 次) 仍未成功，已跳过。`);
                     }
-                };
+                }
                 console.log('Fininshed: dynamically adding songs');
-            };
+            }
+            // 可选：sleep 辅助函数
+            // async function sleep(ms) {
+            //     return new Promise(resolve => setTimeout(resolve, ms));
+            // }
         });
     </script>
 </body>
