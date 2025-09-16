@@ -328,6 +328,7 @@
                     document.querySelector('.aplayer-notice').style.opacity = '0.8';
                     ap.audio.onerror = null;
                     ml_song_info_post_url = ml_song_info_post_url_base + '/Song_V1';
+                    ml_selected_level = $('#level').val();
                     const response = await $.post(ml_song_info_post_url, { url: currentSong.id, level: ml_selected_level, type: 'json' });
                     if (response && response.url) {
                         currentSong.url = response.url;
