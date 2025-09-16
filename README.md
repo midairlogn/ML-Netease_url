@@ -11,6 +11,8 @@
 
 此外，本项目还可以在线听歌哦。
 
+![Screenshot](Screenshots/Screenshot1.png)
+
 ## 快速开始
 
 ### 1. 安装依赖
@@ -86,12 +88,14 @@ python main.py --mode api
 > 黑胶VIP音质：standard, exhigh, lossless, hires, jyeffect  
 > 黑胶SVIP音质：sky, jymaster
 
----
-
 ## 注意事项
 
 - 必须使用黑胶会员账号的 Cookie 才能解析高音质资源。
 - Cookie 格式请严格按照 `cookie.txt.example` 示例填写。
+
+## 致谢
+
+- [Netease_url (Ravizhan)](https://github.com/Suxiaoqinx/Netease_url/)
 
 ---
 
