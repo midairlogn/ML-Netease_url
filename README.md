@@ -94,6 +94,7 @@ python main.py --mode api
 
 - 必须使用黑胶会员账号的 Cookie 才能解析高音质资源。
 - Cookie 格式请严格按照 `cookie.txt.example` 示例填写。
+- 浏览器控制台(console)有详细输出，可以供调试、开发使用。
 
 ## 致谢
 

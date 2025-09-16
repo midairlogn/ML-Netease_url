@@ -304,6 +304,8 @@
                 audio: []
             });
 
+            ap.notice('Waiting for audios to be added', 0, 0.8);
+
             // 监听播放事件，用于验证 URL 是否已更新
             ap.on('play', () => {
                 const currentSong = ap.list.audios[ap.list.index];
@@ -340,8 +342,7 @@
                         ap.skipBack();
                         ap.skipForward();
                         ap.play();
-
-                        console.log(ap.list);
+                        // console.log(ap.list);
                     } else {
                         console.error('获取新 URL 失败，无法播放该歌曲。');
                     }
@@ -497,6 +498,7 @@
                             lrc: processedLyrics
                         };
                         ap.list.add(ml_first_song_detailed_info);
+                        document.querySelector('.aplayer-notice').style.opacity = '0';
                         // 为下载按钮添加点击事件
                         $('#downloadMusicButton').on('click', function() {
                             ml_music_download(
@@ -626,6 +628,8 @@
             // and then add to aplayer playlist
             // first remove all existing songs in playlist
             async function add_all_song_info_to_aplayer(ml_selected_level){
+                ap.notice('Started: dynamically adding songs', 3000, 0.8);
+                console.log('Started: dynamically adding songs\n', ml_song_list);
                 ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
                 ap.list.clear();
                 for(const song of ml_song_list){
@@ -671,6 +675,8 @@
                         console.warn(`歌曲 ${song.name} 达到最大重试次数 (${ml_max_try_times + 1} 次) 仍未成功，已跳过。`);
                     }
                 }
+                console.log(ap.list);
+                ap.notice('Fininshed: dynamically adding songs', 3000, 0.8);
                 console.log('Fininshed: dynamically adding songs');
             }
             // 可选：sleep 辅助函数
