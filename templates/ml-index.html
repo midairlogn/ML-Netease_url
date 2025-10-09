@@ -324,7 +324,7 @@
                 const index = ap.list.index;
                 const currentSong = ap.list.audios[index];
                 if (!currentSong._retried) {
-                    console.log(`❌ 播放错误: ${e.message || e}，尝试刷新 URL 并重试...\n`, e);
+                    console.log(`❌ 播放错误: ${currentSong.name}，尝试刷新 URL 并重试...\n`, e);
                     ap.pause();
                     document.querySelector('.aplayer-notice').textContent = 'Trying to fetch audio.';
                     document.querySelector('.aplayer-notice').style.opacity = '0.8';
