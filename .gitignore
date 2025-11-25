@@ -2,3 +2,6 @@ cookie.txt
 __pycache__
 .vs
 .vscode
+python-3.12.4-embed-amd64
+ml-launch-api.bat
+windows-portable-release
