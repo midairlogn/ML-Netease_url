@@ -53,7 +53,7 @@ python main.py --mode gui --url <网易云音乐地址> --level <音质参数>
 python main.py --mode api
 ```
 
-在window平台上可以直接运行`ml-launch-api.bat`启动。
+在 windows 平台上可以直接去 `Release` 里面下载便携版，解压，按照要求加上 `cookie.txt` 文件，运行 `ml-launch-api.bat` 启动。
 
 - 访问接口：http://ip:port/类型解析
 - 支持 GET 和 POST 请求
