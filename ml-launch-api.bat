@@ -1,1 +1,0 @@
-python-3.12.4-embed-amd64\python .\main.py --mode api
