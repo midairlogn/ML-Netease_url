@@ -176,16 +176,25 @@ export const getSongDetail = async (id: string) => {
             const songInfo = detailData.songs[0];
             const urlInfo = urlData.data?.[0];
 
+            // Handle different artist field names (ar vs artists)
+            const artists = songInfo.ar || songInfo.artists || [];
+            const arName = artists.map((a: any) => a.name).join(', ') || 'Unknown';
+
+            // Handle different album field names (al vs album)
+            const album = songInfo.al || songInfo.album || {};
+            const alName = album.name || 'Unknown';
+            const alPicUrl = normalizePicUrl(album.picUrl, album.picId);
+
             // Construct the response expected by App.tsx
             return {
                 status: 200,
                 url: urlInfo?.url || null,
                 lyric: lyricData.lrc?.lyric || '',
                 tlyric: lyricData.tlyric?.lyric || '',
-                pic: normalizePicUrl(songInfo.al?.picUrl),
+                pic: alPicUrl,
                 name: songInfo.name,
-                ar_name: songInfo.ar?.map((a: any) => a.name).join(', ') || 'Unknown',
-                al_name: songInfo.al?.name || 'Unknown',
+                ar_name: arName,
+                al_name: alName,
                 msg: urlInfo?.url ? 'Success' : 'No URL found (VIP or Copyright restricted)'
             };
         }

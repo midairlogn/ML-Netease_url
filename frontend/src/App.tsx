@@ -23,6 +23,7 @@ function App() {
   const [showLyrics, setShowLyrics] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showMiniLyrics, setShowMiniLyrics] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [playlist, setPlaylist] = useState<Song[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -52,6 +53,7 @@ function App() {
         };
         setCurrentSong(fullSong);
         setIsPlaying(true);
+        setShowMiniLyrics(true);
 
         setPlaylist((prev) => {
           if (!prev.find(s => s.id === fullSong.id)) {
@@ -228,11 +230,14 @@ function App() {
         </AnimatePresence>
       </main>
 
-      <MiniLyrics
-        song={currentSong}
-        currentTime={currentTime}
-        onExpand={() => setShowLyrics(true)}
-      />
+      {showMiniLyrics && (
+        <MiniLyrics
+          song={currentSong}
+          currentTime={currentTime}
+          onExpand={() => setShowLyrics(true)}
+          onClose={() => setShowMiniLyrics(false)}
+        />
+      )}
 
       <Player
         currentSong={currentSong}

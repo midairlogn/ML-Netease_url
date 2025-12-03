@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Maximize2 } from 'lucide-react';
+import { Maximize2, X } from 'lucide-react';
 import type { Song } from '../types';
 import { lrctran } from '../utils/musicUtils';
 
@@ -7,9 +7,10 @@ interface MiniLyricsProps {
     song: Song | null;
     currentTime: number;
     onExpand: () => void;
+    onClose: () => void;
 }
 
-export const MiniLyrics: React.FC<MiniLyricsProps> = ({ song, currentTime, onExpand }) => {
+export const MiniLyrics: React.FC<MiniLyricsProps> = ({ song, currentTime, onExpand, onClose }) => {
     const [parsedLyrics, setParsedLyrics] = useState<{ time: number; text: string }[]>([]);
 
     useEffect(() => {
@@ -79,9 +80,28 @@ export const MiniLyrics: React.FC<MiniLyricsProps> = ({ song, currentTime, onExp
                         <p className="text-xs text-gray-400 truncate">{song.artists}</p>
                     </div>
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white">
-                    <Maximize2 size={18} />
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onExpand();
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded"
+                        title="Expand"
+                    >
+                        <Maximize2 size={16} />
+                    </button>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onClose();
+                        }}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-white p-1 hover:bg-white/10 rounded"
+                        title="Close"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
             </div>
 
             {/* Lyrics */}

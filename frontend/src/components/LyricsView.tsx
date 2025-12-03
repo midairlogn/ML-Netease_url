@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Minimize2 } from 'lucide-react';
 import type { Song } from '../types';
 import { lrctran } from '../utils/musicUtils';
 
@@ -12,6 +12,7 @@ interface LyricsViewProps {
 export const LyricsView: React.FC<LyricsViewProps> = ({ song, onClose, currentTime }) => {
     const [parsedLyrics, setParsedLyrics] = useState<{ time: number; text: string }[]>([]);
     const scrollRef = useRef<HTMLDivElement>(null);
+    const lyricsContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (song.lyric) {
@@ -37,18 +38,23 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ song, onClose, currentTi
     }, [song]);
 
     useEffect(() => {
+        if (!lyricsContainerRef.current || parsedLyrics.length === 0) return;
+
         const activeIndex = parsedLyrics.findIndex((line, index) => {
             const nextLine = parsedLyrics[index + 1];
             return currentTime >= line.time && (!nextLine || currentTime < nextLine.time);
         });
 
-        if (activeIndex !== -1 && scrollRef.current) {
+        if (activeIndex !== -1) {
             const container = scrollRef.current;
-            const activeElement = container.children[activeIndex] as HTMLElement;
-            if (activeElement) {
+            const content = lyricsContainerRef.current;
+
+            if (container && content && content.children[activeIndex]) {
+                const activeElement = content.children[activeIndex] as HTMLElement;
                 const containerHeight = container.clientHeight;
                 const elementTop = activeElement.offsetTop;
                 const elementHeight = activeElement.clientHeight;
+
                 const scrollTo = elementTop - (containerHeight / 2) + (elementHeight / 2);
 
                 container.scrollTo({
@@ -78,10 +84,10 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ song, onClose, currentTi
             </div>
 
             {/* Content - Two Column Layout like Apple Music */}
-            <div className="flex-1 flex items-center justify-center px-8 py-12 overflow-hidden">
-                <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            <div className="flex-1 flex items-center justify-center px-8 py-12 overflow-hidden relative">
+                <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-16 items-center h-full">
                     {/* Left: Album Art */}
-                    <div className="flex items-center justify-center">
+                    <div className="flex items-center justify-center h-full">
                         <div className="relative w-full max-w-md aspect-square rounded-2xl shadow-2xl overflow-hidden bg-gray-800">
                             <div className="absolute -inset-8 bg-gradient-to-br from-purple-600/20 via-pink-600/20 to-orange-600/10 rounded-3xl blur-3xl z-[-1]" />
                              {song.picUrl ? (
@@ -104,9 +110,9 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ song, onClose, currentTi
                     {/* Right: Lyrics */}
                     <div
                         ref={scrollRef}
-                        className="h-[70vh] overflow-y-auto no-scrollbar pr-4"
+                        className="h-full overflow-y-auto no-scrollbar pr-4"
                     >
-                        <div className="space-y-6 py-8">
+                        <div ref={lyricsContainerRef} className="space-y-6 py-[50vh]">
                             {parsedLyrics.map((line, index) => {
                                 const isActive = currentTime >= line.time && (!parsedLyrics[index + 1] || currentTime < parsedLyrics[index + 1].time);
                                 const isPast = parsedLyrics[index + 1] && currentTime >= parsedLyrics[index + 1].time;
@@ -133,7 +139,7 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ song, onClose, currentTi
                                 );
                             })}
                             {parsedLyrics.length === 0 && (
-                                <div className="flex flex-col items-center justify-center h-full text-center">
+                                <div className="flex flex-col items-center justify-center h-full text-center py-20">
                                     <div className="text-gray-600 text-6xl mb-6">♪</div>
                                     <p className="text-gray-400 text-xl">No lyrics available</p>
                                     <p className="text-gray-500 text-sm mt-2">Enjoy the music</p>
@@ -142,6 +148,15 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ song, onClose, currentTi
                         </div>
                     </div>
                 </div>
+
+                {/* Minimize Button */}
+                <button
+                    onClick={onClose}
+                    className="absolute bottom-8 right-8 p-3 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors z-50 group"
+                    title="Minimize to player"
+                >
+                    <Minimize2 size={24} className="group-hover:scale-90 transition-transform" />
+                </button>
             </div>
         </div>
     );
