@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Maximize2 } from 'lucide-react';
-import type { Song } from './Player';
+import type { Song } from '../types';
 import { lrctran } from '../utils/musicUtils';
 
 interface MiniLyricsProps {
@@ -58,12 +58,23 @@ export const MiniLyrics: React.FC<MiniLyricsProps> = ({ song, currentTime, onExp
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                    <img
-                        src={song.picUrl}
-                        alt={song.name}
-                        className="w-10 h-10 rounded-lg shadow-md"
-                    />
-                    <div>
+                    <div className="w-10 h-10 rounded-lg shadow-md overflow-hidden bg-gray-800 flex-shrink-0">
+                         {song.picUrl ? (
+                            <img
+                                src={song.picUrl}
+                                alt={song.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                            />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-600">
+                                🎵
+                            </div>
+                        )}
+                    </div>
+                    <div className="min-w-0">
                         <h4 className="text-sm font-semibold text-white truncate">{song.name}</h4>
                         <p className="text-xs text-gray-400 truncate">{song.artists}</p>
                     </div>

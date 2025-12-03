@@ -1,6 +1,6 @@
 import React from 'react';
 import { Play } from 'lucide-react';
-import type { Song } from './Player';
+import type { Song } from '../types';
 
 interface SongListProps {
     songs: Song[];
@@ -39,12 +39,21 @@ export const SongList: React.FC<SongListProps> = ({ songs, onPlay, onDownload })
                     </div>
 
                     {/* Album Art */}
-                    <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0 shadow-sm">
-                        <img
-                            src={song.picUrl}
-                            alt={song.name}
-                            className="w-full h-full object-cover"
-                        />
+                    <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0 shadow-sm bg-gray-800">
+                        {song.picUrl ? (
+                            <img
+                                src={song.picUrl}
+                                alt={song.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                            />
+                        ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-600">
+                                🎵
+                            </div>
+                        )}
                     </div>
 
                     {/* Song Info */}

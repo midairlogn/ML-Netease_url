@@ -8,3 +8,15 @@ declare module 'browser-id3-writer' {
         revokeURL(): void;
     }
 }
+
+export interface Song {
+    id: string | number;
+    name: string;
+    artists: string;
+    album: string;
+    picUrl: string;
+    url?: string;
+    lyric?: string;
+    tlyric?: string;
+    duration?: number;
+}

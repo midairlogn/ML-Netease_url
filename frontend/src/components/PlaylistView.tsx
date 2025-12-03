@@ -4,7 +4,7 @@ import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { SongList } from './SongList';
 import { getPlaylist } from '../api';
-import type { Song } from './Player';
+import type { Song } from '../types';
 
 interface PlaylistViewProps {
     onPlaySong: (song: Song) => void;

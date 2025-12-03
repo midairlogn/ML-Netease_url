@@ -1,12 +1,18 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Settings as SettingsIcon } from 'lucide-react';
 import { Search } from './components/Search';
 import { PlaylistView } from './components/PlaylistView';
 import { AlbumView } from './components/AlbumView';
-import { Player, type Song } from './components/Player';
+import { Player } from './components/Player';
+import type { Song } from './types';
 import { LyricsView } from './components/LyricsView';
 import { MiniLyrics } from './components/MiniLyrics';
 import { AnimatedBackground } from './components/AnimatedBackground';
+import { Logo } from './components/Logo';
+import { Queue } from './components/Queue';
+import { Settings } from './components/Settings';
+import { ToastContainer, type ToastMessage, type ToastType } from './components/ui/Toast';
 import { getSongDetail } from './api';
 import { downloadMusic, lrctran } from './utils/musicUtils';
 
@@ -15,12 +21,22 @@ function App() {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [playlist, setPlaylist] = useState<Song[]>([]); // Current playing queue
+  const [playlist, setPlaylist] = useState<Song[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = (message: string, type: ToastType = 'info') => {
+    const id = Math.random().toString(36).substring(7);
+    setToasts((prev) => [...prev, { id, message, type }]);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
 
   const handlePlaySong = async (song: Song) => {
-    // If we already have the URL (and it's not expired?), just play.
-    // But usually we need to fetch fresh URL.
     try {
       const details = await getSongDetail(String(song.id));
       if (details.status === 200) {
@@ -37,11 +53,6 @@ function App() {
         setCurrentSong(fullSong);
         setIsPlaying(true);
 
-        // Add to playlist if not present or just set as current?
-        // For now, let's just set it as current. 
-        // If we want a queue, we should manage `playlist` state better.
-        // If coming from a list, we might want to set the whole list as queue.
-        // But for now, simple single play.
         setPlaylist((prev) => {
           if (!prev.find(s => s.id === fullSong.id)) {
             return [...prev, fullSong];
@@ -49,16 +60,18 @@ function App() {
           return prev;
         });
       } else {
-        alert(details.msg || 'Failed to get song details');
+        addToast(details.msg || 'Failed to get song details', 'error');
       }
     } catch (error) {
       console.error("Failed to play song", error);
+      addToast('Failed to play song', 'error');
     }
   };
 
   const handleDownloadSong = async (song: Song) => {
     try {
-      // We need full details for download (lyrics, cover, url)
+      addToast(`Starting download: ${song.name}`, 'info');
+
       let fullSong = song;
       if (!song.url || !song.lyric) {
         const details = await getSongDetail(String(song.id));
@@ -74,7 +87,7 @@ function App() {
             album: details.al_name || song.album,
           };
         } else {
-          alert(details.msg || 'Failed to get song details for download');
+          addToast(details.msg || 'Failed to get song details for download', 'error');
           return;
         }
       }
@@ -92,35 +105,79 @@ function App() {
         fullSong.picUrl,
         fullSong.url!
       );
+
+      addToast(`Downloaded: ${fullSong.name}`, 'success');
     } catch (error) {
       console.error("Download failed", error);
+      addToast('Download failed', 'error');
     }
   };
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (!currentSong || playlist.length === 0) return;
     const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
     const nextIndex = (currentIndex + 1) % playlist.length;
     handlePlaySong(playlist[nextIndex]);
-  };
+  }, [currentSong, playlist]);
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (!currentSong || playlist.length === 0) return;
     const currentIndex = playlist.findIndex(s => s.id === currentSong.id);
     const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
     handlePlaySong(playlist[prevIndex]);
+  }, [currentSong, playlist]);
+
+  const handleRemoveFromQueue = (songId: string | number) => {
+    setPlaylist(prev => prev.filter(s => s.id !== songId));
+    if (currentSong?.id === songId) {
+      if (playlist.length > 1) {
+        handleNext();
+      } else {
+        setCurrentSong(null);
+        setIsPlaying(false);
+      }
+    }
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+
+      switch (e.code) {
+        case 'Space':
+          e.preventDefault();
+          setIsPlaying(prev => !prev);
+          break;
+        case 'ArrowLeft':
+          if (e.metaKey || e.ctrlKey) {
+            handlePrev();
+          }
+          break;
+        case 'ArrowRight':
+          if (e.metaKey || e.ctrlKey) {
+            handleNext();
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleNext, handlePrev]);
 
   return (
     <div className="min-h-screen bg-black text-white font-sans pb-32 relative overflow-x-hidden">
       <AnimatedBackground />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
 
       <header className="sticky top-0 z-40 glass-dark">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <h1 className="text-2xl font-bold gradient-text tracking-tight">
-            ML Netease
-          </h1>
-          <nav className="flex gap-2 glass-dark p-1.5 rounded-full border border-white/10">
+          <Logo />
+
+          <nav className="flex gap-2 glass-dark p-1.5 rounded-full border border-white/10 absolute left-1/2 -translate-x-1/2">
             {(['search', 'playlist', 'album'] as const).map((tab) => (
               <button
                 key={tab}
@@ -139,6 +196,13 @@ function App() {
               </button>
             ))}
           </nav>
+
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-colors"
+          >
+            <SettingsIcon size={20} />
+          </button>
         </div>
       </header>
 
@@ -178,7 +242,23 @@ function App() {
         onPrev={handlePrev}
         onDownload={() => currentSong && handleDownloadSong(currentSong)}
         onShowLyrics={() => setShowLyrics(true)}
+        onToggleQueue={() => setShowQueue(!showQueue)}
         onTimeUpdate={setCurrentTime}
+      />
+
+      <Queue
+        isOpen={showQueue}
+        onClose={() => setShowQueue(false)}
+        playlist={playlist}
+        currentSong={currentSong}
+        onPlay={handlePlaySong}
+        onRemove={handleRemoveFromQueue}
+        onClear={() => setPlaylist([])}
+      />
+
+      <Settings
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
       />
 
       <AnimatePresence>

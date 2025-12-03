@@ -1,9 +1,40 @@
 import { ID3Writer } from 'browser-id3-writer';
 
+import md5 from './md5';
+
 export interface LyricLine {
     time: number;
     index: number;
     text: string;
+}
+
+function neteaseEncryptId(id_str: string): string {
+    const magic = '3go8&$8*3*3h0k(2)2'.split('');
+    const song_id = id_str.split('');
+
+    for (let i = 0; i < song_id.length; i++) {
+        song_id[i] = String.fromCharCode(song_id[i].charCodeAt(0) ^ magic[i % magic.length].charCodeAt(0));
+    }
+
+    const m = song_id.join('');
+    // MD5 hash and base64 encode
+    // The Python implementation uses hashlib.md5().digest() which returns bytes
+    // and then base64 encodes those bytes.
+    // Our md5 library can return a binary string or raw array, we need to handle this correctly.
+
+    // Using the md5 library in 'raw' mode (returns string of bytes) is closest to Python's digest()
+    // Then we use btoa to base64 encode it.
+    const md5_raw = md5(m, undefined, true);
+    let result = btoa(md5_raw);
+
+    result = result.replace(/\//g, '_').replace(/\+/g, '-');
+    return result;
+}
+
+export function getPicUrl(picId: string | number, size: number = 300): string {
+    const picIdStr = String(picId);
+    const encId = neteaseEncryptId(picIdStr);
+    return `https://p3.music.126.net/${encId}/${picIdStr}.jpg?param=${size}y${size}`;
 }
 
 export function lrctrim(lyrics: string): LyricLine[] {
@@ -167,16 +198,20 @@ export async function downloadMusic(
     url: string
 ) {
     try {
-        const audioResponse = await fetch(url);
+        // Ensure URLs are HTTPS to avoid mixed content errors
+        const secureUrl = url.replace(/^http:\/\//, 'https://');
+        const securePic = pic.replace(/^http:\/\//, 'https://');
+
+        const audioResponse = await fetch(secureUrl);
         if (!audioResponse.ok) throw new Error(`无法下载音乐文件: ${audioResponse.statusText}`);
         const audioBuffer = await audioResponse.arrayBuffer();
 
         let coverBuffer: ArrayBuffer | undefined = undefined;
         let coverMimeType: string | undefined = undefined;
 
-        if (pic) {
+        if (securePic) {
             try {
-                const coverResponse = await fetch(pic);
+                const coverResponse = await fetch(securePic);
                 if (coverResponse.ok) {
                     const originalCoverBuffer = await coverResponse.arrayBuffer();
                     const originalCoverMimeType = coverResponse.headers.get('Content-Type') || 'image/jpeg';
@@ -185,7 +220,7 @@ export async function downloadMusic(
                     coverMimeType = compressed.mime;
                 }
             } catch (error) {
-                console.warn("封面下载失败", error);
+                console.warn("封面下载失败 (可能是跨域限制)", error);
             }
         }
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import type { Song } from './Player';
+import type { Song } from '../types';
 import { lrctran } from '../utils/musicUtils';
 
 interface LyricsViewProps {
@@ -82,13 +82,22 @@ export const LyricsView: React.FC<LyricsViewProps> = ({ song, onClose, currentTi
                 <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
                     {/* Left: Album Art */}
                     <div className="flex items-center justify-center">
-                        <div className="relative">
-                            <div className="absolute -inset-8 bg-gradient-to-br from-purple-600/20 via-pink-600/20 to-orange-600/10 rounded-3xl blur-3xl" />
-                            <img
-                                src={song.picUrl}
-                                alt={song.name}
-                                className="relative w-full max-w-md aspect-square rounded-2xl shadow-2xl object-cover"
-                            />
+                        <div className="relative w-full max-w-md aspect-square rounded-2xl shadow-2xl overflow-hidden bg-gray-800">
+                            <div className="absolute -inset-8 bg-gradient-to-br from-purple-600/20 via-pink-600/20 to-orange-600/10 rounded-3xl blur-3xl z-[-1]" />
+                             {song.picUrl ? (
+                                <img
+                                    src={song.picUrl}
+                                    alt={song.name}
+                                    className="relative w-full h-full object-cover"
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).style.display = 'none';
+                                    }}
+                                />
+                            ) : (
+                                <div className="w-full h-full flex items-center justify-center text-gray-600">
+                                    <div className="text-8xl">🎵</div>
+                                </div>
+                            )}
                         </div>
                     </div>
 

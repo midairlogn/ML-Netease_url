@@ -1,17 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Maximize2 } from 'lucide-react';
-
-export interface Song {
-    id: string | number;
-    name: string;
-    artists: string;
-    album: string;
-    picUrl: string;
-    url?: string;
-    lyric?: string;
-    tlyric?: string;
-    duration?: number;
-}
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, Maximize2, ListMusic } from 'lucide-react';
+import type { Song } from '../types';
 
 interface PlayerProps {
     currentSong: Song | null;
@@ -21,6 +10,7 @@ interface PlayerProps {
     onPrev: () => void;
     onDownload: () => void;
     onShowLyrics: () => void;
+    onToggleQueue: () => void;
     onTimeUpdate?: (time: number) => void;
 }
 
@@ -32,6 +22,7 @@ export const Player: React.FC<PlayerProps> = ({
     onPrev,
     onDownload,
     onShowLyrics,
+    onToggleQueue,
     onTimeUpdate,
 }) => {
     const [progress, setProgress] = useState(0);
@@ -136,14 +127,23 @@ export const Player: React.FC<PlayerProps> = ({
                         {/* Left: Song Info */}
                         <div className="flex items-center gap-4 flex-1 min-w-0">
                             <div
-                                className="relative w-16 h-16 rounded-lg overflow-hidden shadow-lg flex-shrink-0 cursor-pointer group"
+                                className="relative w-16 h-16 rounded-lg overflow-hidden shadow-lg flex-shrink-0 cursor-pointer group bg-gray-800"
                                 onClick={onShowLyrics}
                             >
-                                <img
-                                    src={currentSong.picUrl}
-                                    alt={currentSong.name}
-                                    className="w-full h-full object-cover"
-                                />
+                                {currentSong.picUrl ? (
+                                    <img
+                                        src={currentSong.picUrl}
+                                        alt={currentSong.name}
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                        }}
+                                    />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-600">
+                                        <ListMusic size={24} />
+                                    </div>
+                                )}
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                     <Maximize2 size={20} className="text-white" />
                                 </div>
@@ -196,7 +196,7 @@ export const Player: React.FC<PlayerProps> = ({
                             </div>
                         </div>
 
-                        {/* Right: Volume Control */}
+                        {/* Right: Volume Control & Queue */}
                         <div className="flex items-center gap-4 flex-1 justify-end">
                             <div className="flex items-center gap-3">
                                 <button
@@ -227,6 +227,16 @@ export const Player: React.FC<PlayerProps> = ({
                                     />
                                 </div>
                             </div>
+
+                            <div className="w-px h-8 bg-white/10 mx-2" />
+
+                            <button
+                                onClick={onToggleQueue}
+                                className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+                                title="Queue"
+                            >
+                                <ListMusic size={20} />
+                            </button>
                         </div>
                     </div>
                 </div>

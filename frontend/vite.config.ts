@@ -12,22 +12,14 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/Song_V1': {
-        target: 'http://localhost:6969',
+      '/api': {
+        target: 'https://music.163.com',
         changeOrigin: true,
-      },
-      '/Search': {
-        target: 'http://localhost:6969',
-        changeOrigin: true,
-      },
-      '/Playlist': {
-        target: 'http://localhost:6969',
-        changeOrigin: true,
-      },
-      '/Album': {
-        target: 'http://localhost:6969',
-        changeOrigin: true,
-      },
+        headers: {
+          'Referer': 'https://music.163.com/',
+          'Origin': 'https://music.163.com'
+        }
+      }
     }
   }
 })
