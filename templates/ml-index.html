@@ -215,7 +215,7 @@
                     <div class="mb-2">
                         <button id="show-big-pic" type="button" class="btn btn-outline-info btn-sm me-2" style="vertical-align:middle;">显示大图</button>
                     </div>
-                    <div class="mb-2"><span class="badge bg-info text-dark me-2">链接</span><a id="song_url" href="" target="_blank">点击下载mp3</a></div>
+                    <div class="mb-2"><span class="badge bg-info text-dark me-2">链接</span><a id="song_url" href="" target="_blank">点击下载音频</a></div>
                     <div class="mb-2"><span class="badge bg-dark me-2">歌词</span></div>
                     <div class="lyric-box" id="lyric"></div>
                 </div>
@@ -294,6 +294,7 @@
     </script>
 
     <!-- 引入 ml 下载函数 (./ml-js-plugins/ml-func-plugins.js) -->
+    <script src="{{ url_for('static', filename='ml-flac-writer.js') }}"></script>
     <script src="{{ url_for('static', filename='ml-func-plugins.js') }}"></script>
 
     <script>
@@ -486,7 +487,10 @@
                             processedLyrics = lrctran(data.lyric, data.tlyric);
                         }
                         $('#lyric').html(processedLyrics.replace(/\n/g, '<br>'));
-                        $('#song_url').attr('href', data.url).text('点击下载mp3');
+                        // 根据音质级别确定链接文本
+                        const mp3Levels = ['standard', 'exhigh'];
+                        const linkText = mp3Levels.includes(level) ? '点击下载 mp3' : '点击下载 flac';
+                        $('#song_url').attr('href', data.url).text(linkText);
                         $('#song-info').removeClass('d-none');
                         $('#show-big-pic').data('pic', data.pic);
                         ap.list.clear();
@@ -508,7 +512,8 @@
                                 processedLyrics,
                                 data.name,
                                 data.pic,
-                                data.url
+                                data.url,
+                                level
                             );
                         });
                     } else {

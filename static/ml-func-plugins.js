@@ -204,22 +204,43 @@ async function compressImage(imageBuffer, mimeType) {
     });
 }
 
+// 根据音质级别确定文件格式
+// standard, exhigh -> mp3
+// lossless, hires, jyeffect, sky, jymaster -> flac
+function getAudioFormatByLevel(level) {
+    const mp3Levels = ['standard', 'exhigh'];
+    if (mp3Levels.includes(level)) {
+        return 'mp3';
+    }
+    return 'flac';
+}
+
+// 获取当前选择的音质级别
+function getCurrentLevel() {
+    const levelSelect = document.getElementById('level');
+    return levelSelect ? levelSelect.value : 'standard';
+}
+
 // 定义下载函数
-async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url) {
+async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null) {
     try {
-        // 1. 获取MP3文件
+        // 获取音质级别
+        const audioLevel = level || getCurrentLevel();
+        const audioFormat = getAudioFormatByLevel(audioLevel);
+        console.log(`当前音质级别: ${audioLevel}, 格式: ${audioFormat}`);
+
+        // 1. 获取音乐文件
         console.log("正在下载音乐文件...");
         const audioResponse = await fetch(url);
         if (!audioResponse.ok) {
             throw new Error(`无法下载音乐文件: ${audioResponse.statusText}`);
         }
         // 直接获取 ArrayBuffer
-        const audioBuffer = await audioResponse.arrayBuffer(); // audioBuffer 现在是 ArrayBuffer
+        const audioBuffer = await audioResponse.arrayBuffer();
         console.log("音乐文件下载完成。");
 
         // 2. 获取封面图片
-        // 这部分代码已经正确地处理了 ArrayBuffer，所以无需修改
-        let coverBuffer = null; // 期望 ArrayBuffer
+        let coverBuffer = null;
         let coverMimeType = null;
         if (pic) {
             console.log("正在下载封面图片...");
@@ -231,12 +252,10 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                     const originalCoverBuffer = await coverResponse.arrayBuffer();
                     const originalCoverMimeType = coverResponse.headers.get('Content-Type');
 
-                    // *** 调用图片压缩函数 ***
-                    // 假设 compressImage 返回 { buffer: ArrayBuffer, mime: string }
+                    // 调用图片压缩函数
                     const compressedImageData = await compressImage(originalCoverBuffer, originalCoverMimeType);
-                    coverBuffer = compressedImageData.buffer; // ArrayBuffer
+                    coverBuffer = compressedImageData.buffer;
                     coverMimeType = compressedImageData.mime;
-                    // *************************
 
                     console.log("封面图片处理完成。");
                 }
@@ -246,44 +265,112 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             }
         }
 
-        // 3. 使用id3-writer添加ID3标签
-        console.log("正在添加 ID3 标签...");
-        const writer = new ID3Writer(audioBuffer);
+        let taggedBlob;
+        let fileName;
 
-        // 设置标签
-        writer
-            .setFrame('TIT2', name)      // 标题
-            .setFrame('TPE1', [ar_name]) // 艺术家（数组）
-            .setFrame('TALB', al_name);  // 专辑
+        if (audioFormat === 'mp3') {
+            // MP3 格式：使用 ID3Writer 添加 ID3 标签
+            console.log("正在添加 ID3 标签...");
+            const writer = new ID3Writer(audioBuffer);
 
-        // 歌词
-        if (processedLyrics) {
-            writer.setFrame('USLT', {
-                language: 'und',
-                description: '',
-                lyrics: processedLyrics
-            });
+            // 设置标签
+            writer
+                .setFrame('TIT2', name)      // 标题
+                .setFrame('TPE1', [ar_name]) // 艺术家（数组）
+                .setFrame('TALB', al_name);  // 专辑
+
+            // 歌词
+            if (processedLyrics) {
+                writer.setFrame('USLT', {
+                    language: 'und',
+                    description: '',
+                    lyrics: processedLyrics
+                });
+            }
+
+            // 封面
+            if (coverBuffer && coverMimeType) {
+                writer.setFrame('APIC', {
+                    type: 3,
+                    data: coverBuffer,
+                    description: 'Cover',
+                    useUnicodeEncoding: false
+                });
+            }
+
+            // 写入标签
+            writer.addTag();
+            taggedBlob = writer.getBlob();
+            fileName = `${name}.mp3`;
+            console.log("ID3 标签添加完成。");
+
+        } else {
+            // FLAC 格式：使用 FlacWriter 添加 Vorbis 注释
+            console.log("正在添加 FLAC Vorbis 标签...");
+
+            // 检查是否为有效的 FLAC 文件
+            const headerBytes = new Uint8Array(audioBuffer.slice(0, 4));
+            const magic = String.fromCharCode(headerBytes[0], headerBytes[1], headerBytes[2], headerBytes[3]);
+
+            if (magic !== 'fLaC') {
+                console.warn("警告：期望 FLAC 格式但文件头不匹配，将尝试作为 MP3 处理...");
+                // 如果不是 FLAC，回退到 MP3 处理
+                const writer = new ID3Writer(audioBuffer);
+                writer
+                    .setFrame('TIT2', name)
+                    .setFrame('TPE1', [ar_name])
+                    .setFrame('TALB', al_name);
+
+                if (processedLyrics) {
+                    writer.setFrame('USLT', {
+                        language: 'und',
+                        description: '',
+                        lyrics: processedLyrics
+                    });
+                }
+
+                if (coverBuffer && coverMimeType) {
+                    writer.setFrame('APIC', {
+                        type: 3,
+                        data: coverBuffer,
+                        description: 'Cover',
+                        useUnicodeEncoding: false
+                    });
+                }
+
+                writer.addTag();
+                taggedBlob = writer.getBlob();
+                fileName = `${name}.mp3`;
+                console.log("已回退到 MP3 格式处理。");
+            } else {
+                // 确实是 FLAC 文件
+                const writer = new FlacWriter(audioBuffer);
+
+                // 设置 Vorbis 注释标签
+                writer
+                    .setFrame('TITLE', name)
+                    .setFrame('ARTIST', ar_name)
+                    .setFrame('ALBUM', al_name);
+
+                // 歌词
+                if (processedLyrics) {
+                    writer.setFrame('LYRICS', processedLyrics);
+                }
+
+                // 封面
+                if (coverBuffer && coverMimeType) {
+                    writer.setPicture(coverBuffer, coverMimeType, 'Cover');
+                }
+
+                // 写入标签
+                writer.addTag();
+                taggedBlob = writer.getBlob();
+                fileName = `${name}.flac`;
+                console.log("FLAC Vorbis 标签添加完成。");
+            }
         }
-
-        // 封面
-        if (coverBuffer && coverMimeType) {
-            writer.setFrame('APIC', {
-                type: 3,
-                data: coverBuffer,
-                description: 'Cover',
-                useUnicodeEncoding: false
-            });
-        }
-
-        // 写入标签
-        writer.addTag();
-
-        // 获取带标签的 Blob
-        const taggedBlob = writer.getBlob();
-        console.log("ID3 标签添加完成。");
 
         // 4. 触发下载
-        const fileName = `${name}.mp3`;
         const blobUrl = URL.createObjectURL(taggedBlob);
         const a = document.createElement('a');
         a.href = blobUrl;
@@ -293,7 +380,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
         document.body.removeChild(a);
         URL.revokeObjectURL(blobUrl);
         console.log(`文件 "${fileName}" 已开始下载。`);
-        
+
     } catch (error) {
         console.error("下载或处理音乐文件时发生错误:", error);
         alert("下载音乐时发生错误，请查看控制台获取详情。");
@@ -327,7 +414,8 @@ async function ml_donwload_song_list(ml_selected_level){
                         processedLyrics,
                         response.name,
                         response.pic,
-                        response.url
+                        response.url,
+                        ml_selected_level
                     );
                 } else {
                     console.error(`Error downloading song ${song.name}: ${response.msg}`);
