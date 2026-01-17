@@ -501,7 +501,7 @@
                         ap.list.add(ml_first_song_detailed_info);
                         document.querySelector('.aplayer-notice').style.opacity = '0';
                         // 为下载按钮添加点击事件
-                        $('#downloadMusicButton').on('click', function() {
+                        $('#downloadMusicButton').off('click').on('click', function() {
                             ml_music_download(
                                 data.al_name,
                                 data.ar_name,
