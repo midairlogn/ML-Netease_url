@@ -396,6 +396,7 @@
 
             // 搜索功能
             $('#search-btn').on('click', function() {
+                const $btn = $(this);
                 const keywords = $('#search_keywords').val();
                 const limit = $('#search_limit').val();
                 ml_search_real_url = ml_song_info_post_url_base + '/Search';
@@ -403,6 +404,9 @@
                     alert('请输入搜索关键词');
                     return;
                 }
+                // 设置按钮加载状态
+                ml_set_button_state('#search-btn', true, '搜索中...');
+
                 $.ajax({
                     url: ml_search_real_url,
                     method: 'GET',
@@ -442,6 +446,10 @@
                     error: function() {
                         $('#search-list').html('<li class="list-group-item">搜索失败，请重试</li>');
                         $('#search-result').removeClass('d-none');
+                    },
+                    complete: function() {
+                        // 恢复按钮状态
+                        ml_set_button_state('#search-btn', false);
                     }
                 });
             });
@@ -473,6 +481,9 @@
                     alert('请输入歌曲ID或URL');
                     return;
                 }
+                // 设置按钮加载状态
+                ml_set_button_state('#parse-btn', true, '解析中...');
+
                 $.post(ml_get_song_info_real_url, { url: songIds, level: level, type:'json' }, function(data) {
                     console.log("单曲解析");
                     console.log(data);
@@ -506,6 +517,7 @@
                         document.querySelector('.aplayer-notice').style.opacity = '0';
                         // 为下载按钮添加点击事件
                         $('#downloadMusicButton').off('click').on('click', function() {
+                            ml_set_button_state('#downloadMusicButton', true, '下载中...');
                             ml_music_download(
                                 data.al_name,
                                 data.ar_name,
@@ -514,12 +526,17 @@
                                 data.pic,
                                 data.url,
                                 level
-                            );
+                            ).finally(() => {
+                                ml_set_button_state('#downloadMusicButton', false);
+                            });
                         });
                     } else {
                         alert(data.msg);
                     }
-                }, 'json');
+                }, 'json').always(function() {
+                    // 恢复按钮状态
+                    ml_set_button_state('#parse-btn', false);
+                });
             });
 
             // 显示大图按钮事件
@@ -541,6 +558,10 @@
                 // 支持直接粘贴歌单链接
                 const idMatch = pid.match(/playlist\?id=(\d+)/);
                 if (idMatch) pid = idMatch[1];
+
+                // 设置按钮加载状态
+                ml_set_button_state('#playlist-btn', true, '解析中...');
+
                 $.get(ml_get_playlist_real_url, { id: pid }, function(data) {
                     console.log("歌单解析");
                     console.log(data);
@@ -577,7 +598,10 @@
                         $('#playlist-result').removeClass('d-none');
                         $('#playlist-tracks').html('<li class="list-group-item">歌单解析失败：'+data.msg+'</li>');
                     }
-                }, 'json');
+                }, 'json').always(function() {
+                    // 恢复按钮状态
+                    ml_set_button_state('#playlist-btn', false);
+                });
             });
 
             // 专辑解析
@@ -591,6 +615,10 @@
                 // 支持直接粘贴专辑链接
                 const idMatch = aid.match(/album\?id=(\d+)/);
                 if (idMatch) aid = idMatch[1];
+
+                // 设置按钮加载状态
+                ml_set_button_state('#album-btn', true, '解析中...');
+
                 $.get(ml_get_album_real_url, { id: aid }, function(data) {
                     console.log("专辑解析");
                     console.log(data);
@@ -627,63 +655,90 @@
                         $('#album-result').removeClass('d-none');
                         $('#album-tracks').html('<li class="list-group-item">专辑解析失败：'+data.msg+'</li>');
                     }
-                }, 'json');
+                }, 'json').always(function() {
+                    // 恢复按钮状态
+                    ml_set_button_state('#album-btn', false);
+                });
             });
             
             // fetch all detailed info
             // and then add to aplayer playlist
             // first remove all existing songs in playlist
+            // 播放状态管理
+            var ml_play_state = {
+                isLoading: false
+            };
+
             async function add_all_song_info_to_aplayer(ml_selected_level){
-                ap.notice('Started: dynamically adding songs', 3000, 0.8);
-                console.log('Started: dynamically adding songs\n', ml_song_list);
-                ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
-                ap.list.clear();
-                for(const song of ml_song_list){
-                    let currentTry = 0;
-                    let songAdded = false;
-                    let response = null;
-                    while(currentTry <= ml_max_try_times && !songAdded){
-                        try {
-                            console.log(`尝试获取歌曲信息：${song.name} (尝试次数: ${currentTry + 1}/${ml_max_try_times + 1})`);
-                            response = await $.post(ml_get_song_info_real_url, { url: song.id, level: ml_selected_level, type: 'json' });
-                            if(response.status === 200){
-                                console.log(`成功获取歌曲信息：${song.name}\n`, response);
-                                songAdded = true;
-                            } else {
-                                console.error(`获取歌曲 ${song.name} 失败 (尝试 ${currentTry + 1}/${ml_max_try_times + 1}): ${response.msg}`);
-                                currentTry++;
-                                // 可选：延迟，避免高频请求
-                                // await sleep(1000);
-                            }
-                        } catch(error) {
-                            console.error(`请求歌曲 ${song.name} 时发生网络错误或异常 (尝试 ${currentTry + 1}/${ml_max_try_times + 1}):`, error);
-                            currentTry++;
-                            // 可选：延迟
-                            // await sleep(1000);
-                        }
-                    }
-                    if(songAdded && response){
-                        let processedLyrics = response.lyric;
-                        if(response.tlyric){
-                            processedLyrics = lrctran(response.lyric, response.tlyric);
-                        }
-                        ml_song_detailed = {
-                            id: song.id,
-                            name: response.name,
-                            artist: response.ar_name,
-                            url: response.url,
-                            cover: response.pic,
-                            lrc: processedLyrics
-                        };
-                        ap.list.add(ml_song_detailed);
-                        console.log(`歌曲 ${song.name} 已成功添加到播放列表。`);
-                    } else {
-                        console.warn(`歌曲 ${song.name} 达到最大重试次数 (${ml_max_try_times + 1} 次) 仍未成功，已跳过。`);
-                    }
+                // 防止重复点击
+                if (ml_play_state.isLoading) {
+                    console.warn('正在加载播放列表，请等待完成。');
+                    return;
                 }
-                console.log(ap.list);
-                ap.notice('Fininshed: dynamically adding songs', 3000, 0.8);
-                console.log('Fininshed: dynamically adding songs');
+
+                // 获取当前活动的容器
+                const containerSelector = ml_get_active_result_container();
+                if (!containerSelector) {
+                    console.error('未找到活动的结果容器');
+                    return;
+                }
+
+                // 设置加载状态
+                ml_play_state.isLoading = true;
+                ml_set_button_state(`${containerSelector} [id^="play_all"]`, true, '加载中...');
+
+                try {
+                    ap.notice('Started: dynamically adding songs', 3000, 0.8);
+                    console.log('Started: dynamically adding songs\n', ml_song_list);
+                    ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
+                    ap.list.clear();
+                    for(const song of ml_song_list){
+                        let currentTry = 0;
+                        let songAdded = false;
+                        let response = null;
+                        while(currentTry <= ml_max_try_times && !songAdded){
+                            try {
+                                console.log(`尝试获取歌曲信息：${song.name} (尝试次数: ${currentTry + 1}/${ml_max_try_times + 1})`);
+                                response = await $.post(ml_get_song_info_real_url, { url: song.id, level: ml_selected_level, type: 'json' });
+                                if(response.status === 200){
+                                    console.log(`成功获取歌曲信息：${song.name}\n`, response);
+                                    songAdded = true;
+                                } else {
+                                    console.error(`获取歌曲 ${song.name} 失败 (尝试 ${currentTry + 1}/${ml_max_try_times + 1}): ${response.msg}`);
+                                    currentTry++;
+                                }
+                            } catch(error) {
+                                console.error(`请求歌曲 ${song.name} 时发生网络错误或异常 (尝试 ${currentTry + 1}/${ml_max_try_times + 1}):`, error);
+                                currentTry++;
+                            }
+                        }
+                        if(songAdded && response){
+                            let processedLyrics = response.lyric;
+                            if(response.tlyric){
+                                processedLyrics = lrctran(response.lyric, response.tlyric);
+                            }
+                            ml_song_detailed = {
+                                id: song.id,
+                                name: response.name,
+                                artist: response.ar_name,
+                                url: response.url,
+                                cover: response.pic,
+                                lrc: processedLyrics
+                            };
+                            ap.list.add(ml_song_detailed);
+                            console.log(`歌曲 ${song.name} 已成功添加到播放列表。`);
+                        } else {
+                            console.warn(`歌曲 ${song.name} 达到最大重试次数 (${ml_max_try_times + 1} 次) 仍未成功，已跳过。`);
+                        }
+                    }
+                    console.log(ap.list);
+                    ap.notice('Finished: dynamically adding songs', 3000, 0.8);
+                    console.log('Finished: dynamically adding songs');
+                } finally {
+                    // 恢复按钮状态
+                    ml_play_state.isLoading = false;
+                    ml_set_button_state(`${containerSelector} [id^="play_all"]`, false);
+                }
             }
             // 可选：sleep 辅助函数
             // async function sleep(ms) {

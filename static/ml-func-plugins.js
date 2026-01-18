@@ -392,6 +392,33 @@ var ml_song_list = [];
 var ml_first_song_detailed_info = {};
 const ml_max_try_times = 5;
 
+// 设置按钮状态
+function ml_set_button_state(buttonSelector, isLoading, loadingText = '处理中...') {
+    const $btn = $(buttonSelector);
+    if (isLoading) {
+        // 保存原始文本
+        if (!$btn.data('original-text')) {
+            $btn.data('original-text', $btn.text());
+        }
+        $btn.prop('disabled', true)
+            .addClass('disabled')
+            .html(`<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${loadingText}`);
+    } else {
+        const originalText = $btn.data('original-text') || 'Download All';
+        $btn.prop('disabled', false)
+            .removeClass('disabled')
+            .text(originalText);
+    }
+}
+
+// 获取当前活动的结果容器选择器
+function ml_get_active_result_container() {
+    if (!$('#search-result').hasClass('d-none')) return '#search-result';
+    if (!$('#playlist-result').hasClass('d-none')) return '#playlist-result';
+    if (!$('#album-result').hasClass('d-none')) return '#album-result';
+    return null;
+}
+
 async function ml_donwload_song_list(ml_selected_level){
     let unsuccessfulSongs = [...ml_song_list]; // Copy the original list
     let attempt = 0;
