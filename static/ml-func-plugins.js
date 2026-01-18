@@ -396,32 +396,253 @@ const ml_max_try_times = 5;
 var ml_download_state = {
     isDownloading: false,      // 是否正在下载
     isPaused: false,           // 是否暂停
-    currentIndex: 0,           // 当前下载索引
+    currentIndex: 0,           // 当前下载进度（浮点数，用于计算百分比）
+    completedCount: 0,         // 已完成的歌曲数（整数，用于显示）
     totalCount: 0,             // 总歌曲数
     successCount: 0,           // 成功数
     failedCount: 0,            // 失败数
     failedSongs: [],           // 失败的歌曲列表
     abortController: null,     // 用于取消请求
-    containerSelector: null    // 当前活动的容器选择器
+    containerSelector: null,   // 当前活动的容器选择器
+    startTime: null,           // 下载开始时间
+    // EMA 速度估算
+    emaSpeed: null,            // EMA 速度（歌曲/毫秒）
+    speedHistory: [],          // 速度计算历史记录 [{time, count}]
+    pauseStartTime: null,      // 暂停开始时间
 };
 
-// 并行下载配置
-const ML_PARALLEL_DOWNLOAD_COUNT = 3; // 同时下载的歌曲数量
+// EMA 平滑系数
+const ML_EMA_ALPHA = 0.2;
+// EMA 权重 (在最终估算中 EMA 占比)
+const ML_EMA_WEIGHT = 0.8;
+// 速度计算的时间窗口 (毫秒) - 窗口越大越平滑，越小越灵敏
+const ML_SPEED_WINDOW = 5000;
+// 需要完成的最少歌曲数才开始估算时间
+const ML_MIN_COMPLETED_FOR_ETA = 1;
+
+// 获取当前设置的并行下载数量
+function ml_get_concurrent_count() {
+    const count = parseInt($('#concurrent-downloads').val());
+    if (isNaN(count) || count < 1) return 3;
+    if (count > 10) return 10; // 严格限制最大值为10，与UI保持一致
+    return count;
+}
+
+// 格式化剩余时间（使用清晰的中文格式）
+function ml_format_remaining_time(seconds) {
+    if (!isFinite(seconds) || seconds < 0) {
+        return '计算中...';
+    }
+
+    seconds = Math.ceil(seconds);
+
+    if (seconds === 0) {
+        return '即将完成';
+    }
+
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    // 超过1天
+    if (days > 0) {
+        if (hours > 0) {
+            return `${days}天${hours}小时`;
+        }
+        return `${days}天`;
+    }
+
+    // 超过1小时
+    if (hours > 0) {
+        if (mins > 0) {
+            return `${hours}小时${mins}分`;
+        }
+        return `${hours}小时`;
+    }
+
+    // 超过1分钟
+    if (mins > 0) {
+        if (secs > 0) {
+            return `${mins}分${secs}秒`;
+        }
+        return `${mins}分钟`;
+    }
+
+    // 小于1分钟
+    return `${secs}秒`;
+}
+
+// 更新 EMA 速度（使用滑动窗口计算，避免短时间内突发完成导致剧烈波动）
+function ml_update_speed() {
+    const state = ml_download_state;
+    const now = Date.now();
+    const currentCount = state.completedCount;
+
+    // 记录当前状态
+    state.speedHistory.push({ time: now, count: currentCount });
+
+    // 清理过旧的记录 (只保留最近 30秒，足够用于窗口计算)
+    const keepTime = now - 30000;
+    while (state.speedHistory.length > 0 && state.speedHistory[0].time < keepTime) {
+        state.speedHistory.shift();
+    }
+
+    // 寻找合适的对比样本点 (大约在 ML_SPEED_WINDOW 之前)
+    const targetTime = now - ML_SPEED_WINDOW;
+    let prevRecord = null;
+
+    // 1. 尝试从历史记录中找
+    // 我们的目标是找到 time <= targetTime 的最近的一个点
+    for (let i = state.speedHistory.length - 1; i >= 0; i--) {
+        if (state.speedHistory[i].time <= targetTime) {
+            prevRecord = state.speedHistory[i];
+            break;
+        }
+    }
+
+    // 2. 如果没找到（说明历史记录都很新），或者找到的点离现在太近（< 1s）
+    // 尝试使用任务开始时间作为基准
+    if (!prevRecord || (now - prevRecord.time < 1000)) {
+        if (state.startTime && (now - state.startTime >= 1000)) {
+             prevRecord = { time: state.startTime, count: 0 };
+        }
+    }
+
+    // 如果仍然没有合适的对比点（可能是刚开始下载不到1秒），则跳过更新
+    if (!prevRecord) return;
+
+    const timeDiff = now - prevRecord.time;
+    const countDiff = currentCount - prevRecord.count;
+
+    if (timeDiff <= 0 || countDiff <= 0) return;
+
+    // 计算当前窗口内的平均速度 (样本速度)
+    const sampleSpeed = countDiff / timeDiff; // 歌曲/毫秒
+
+    if (state.emaSpeed === null) {
+        state.emaSpeed = sampleSpeed;
+    } else {
+        // 动态调整 Alpha:
+        // 如果样本的时间跨度 (timeDiff) 接近或超过理想窗口 (ML_SPEED_WINDOW)，说明样本可靠，权重增加
+        // 如果样本时间跨度很短（刚开始），权重降低，防止初期波动
+        const reliability = Math.min(timeDiff / ML_SPEED_WINDOW, 1.0);
+        const dynamicAlpha = ML_EMA_ALPHA * reliability;
+
+        state.emaSpeed = dynamicAlpha * sampleSpeed + (1 - dynamicAlpha) * state.emaSpeed;
+    }
+}
+
+// 计算预估剩余时间（毫秒）- 结合整体平均和 EMA
+function ml_estimate_remaining_time() {
+    const state = ml_download_state;
+
+    // 需要至少完成一定数量的歌曲才开始估算
+    if (state.completedCount < ML_MIN_COMPLETED_FOR_ETA || !state.startTime) {
+        return null;
+    }
+
+    const now = Date.now();
+    const elapsedMs = now - state.startTime;
+    if (elapsedMs <= 0) {
+        return null;
+    }
+
+    // 整体平均速度
+    const overallSpeed = state.completedCount / elapsedMs;
+
+    // 最终速度：如果有 EMA 速度，则加权混合；否则使用整体平均
+    let finalSpeed;
+    if (state.emaSpeed !== null && state.emaSpeed > 0) {
+        // 加权：EMA 占 ML_EMA_WEIGHT，整体平均占剩余部分（保持稳定性）
+        finalSpeed = ML_EMA_WEIGHT * state.emaSpeed + (1 - ML_EMA_WEIGHT) * overallSpeed;
+    } else {
+        finalSpeed = overallSpeed;
+    }
+
+    const remainingSongs = state.totalCount - state.completedCount;
+    if (remainingSongs <= 0) {
+        return 0;
+    }
+
+    return remainingSongs / finalSpeed; // 毫秒
+}
 
 // 更新进度条UI
 function ml_update_progress_ui() {
     const state = ml_download_state;
-    const progress = state.totalCount > 0 ? Math.round((state.currentIndex / state.totalCount) * 100) : 0;
+    const progress = state.totalCount > 0 ? (state.currentIndex / state.totalCount) * 100 : 0;
+
+    // 更新速度估算
+    ml_update_speed();
 
     // 获取当前活动容器中的控制区域
     const $controls = state.containerSelector ? $(state.containerSelector).find('.ml-download-controls') : $('.ml-download-controls');
 
     // 更新进度条
     $controls.find('.ml-progress-bar').css('width', progress + '%').attr('aria-valuenow', progress);
-    $controls.find('.ml-progress-text').text(`${state.currentIndex}/${state.totalCount} (成功: ${state.successCount}, 失败: ${state.failedCount})`);
+    // 使用 completedCount 显示已完成的歌曲数（整数）
+    $controls.find('.ml-progress-text').text(`${state.completedCount}/${state.totalCount} (成功: ${state.successCount}, 失败: ${state.failedCount})`);
 
-    // 更新进度百分比
-    $controls.find('.ml-progress-percent').text(progress + '%');
+    // 计算预估剩余时间（使用整体平均速度）
+    let remainingTimeText = '计算中...';
+
+    if (state.isPaused) {
+        remainingTimeText = '已暂停';
+    } else {
+        const remainingMs = ml_estimate_remaining_time();
+        if (remainingMs !== null) {
+            remainingTimeText = ml_format_remaining_time(remainingMs / 1000);
+        }
+    }
+
+    // 更新进度百分比（保留1位小数）和剩余时间
+    $controls.find('.ml-progress-percent').text(progress.toFixed(1) + '%');
+    $controls.find('.ml-progress-eta').text(remainingTimeText);
+
+    // 计算并显示当前速度
+    let speedText = '';
+    // 使用 EMA 速度，如果没有则使用整体平均
+    const currentSpeed = state.emaSpeed || (state.completedCount > 0 && state.startTime ? state.completedCount / (Date.now() - state.startTime) : 0);
+
+    if (currentSpeed > 0) {
+        // 转换为更易读的格式
+        const songsPerSec = currentSpeed * 1000;
+        if (songsPerSec >= 1) {
+             speedText = songsPerSec.toFixed(1) + ' 首/秒';
+        } else {
+             // 如果速度很慢，显示多少秒一首
+             speedText = (1 / songsPerSec).toFixed(1) + ' 秒/首';
+        }
+    }
+    $controls.find('.ml-progress-speed').text(speedText ? ` (${speedText})` : '');
+}
+
+// 处理暂停时间补偿（支持多次暂停）
+function ml_compensate_pause_time() {
+    if (ml_download_state.pauseStartTime) {
+        const pausedDuration = Date.now() - ml_download_state.pauseStartTime;
+
+        if (pausedDuration > 0) {
+            console.log(`暂停结束，补偿时间: ${pausedDuration}ms`);
+
+            // 1. 推迟开始时间，保证整体平均速度计算正确
+            // 每次暂停都会累加这个推迟，因此自然支持多次暂停
+            if (ml_download_state.startTime) {
+                ml_download_state.startTime += pausedDuration;
+            }
+
+            // 2. 推迟历史记录中的时间点，保证瞬时速度计算正确（保持相对时间一致）
+            if (ml_download_state.speedHistory) {
+                ml_download_state.speedHistory.forEach(record => {
+                    record.time += pausedDuration;
+                });
+            }
+        }
+
+        // 3. 清除暂停开始时间，为下一次暂停做准备
+        ml_download_state.pauseStartTime = null;
+    }
 }
 
 // 设置按钮状态
@@ -458,7 +679,8 @@ function ml_show_download_controls(containerSelector, show) {
         // 重置进度条状态
         $controls.find('.ml-progress-bar').css('width', '0%').attr('aria-valuenow', 0);
         $controls.find('.ml-progress-text').text('准备中...');
-        $controls.find('.ml-progress-percent').text('0%');
+        $controls.find('.ml-progress-percent').text('0.0%');
+        $controls.find('.ml-progress-eta').text('计算中...');
         $controls.find('.ml-pause-btn').text('暂停下载').removeClass('btn-success').addClass('btn-warning');
 
         // 绑定暂停按钮事件
@@ -467,15 +689,30 @@ function ml_show_download_controls(containerSelector, show) {
             e.stopPropagation();
 
             if (ml_download_state.isPaused) {
+                // 用户点击“继续下载”
                 ml_download_state.isPaused = false;
                 $(this).text('暂停下载').removeClass('btn-success').addClass('btn-warning');
+
+                // 调用时间补偿函数（处理多次暂停的核心逻辑）
+                ml_compensate_pause_time();
+
                 console.log('下载已继续');
                 // 触发继续下载事件
                 $(document).trigger('ml-download-resume');
+
+                // 立即更新一次 UI 以移除“已暂停”状态
+                ml_update_progress_ui();
             } else {
+                // 用户点击“暂停下载”
                 ml_download_state.isPaused = true;
+                // 记录暂停开始时间
+                ml_download_state.pauseStartTime = Date.now();
+
                 $(this).text('继续下载').removeClass('btn-warning').addClass('btn-success');
                 console.log('下载已暂停');
+
+                // 立即更新一次 UI 以显示“已暂停”
+                ml_update_progress_ui();
             }
         });
 
@@ -552,29 +789,40 @@ function ml_get_active_result_container() {
 
 // 并行下载单首歌曲
 async function ml_download_single_song(song, ml_selected_level) {
-    const response = await $.post(ml_song_info_post_url_base + '/Song_V1', {
-        url: song.id,
-        level: ml_selected_level,
-        type: 'json'
-    });
+    let infoFetched = false;
 
-    if (response.status === 200) {
-        let processedLyrics = response.lyric;
-        if (response.tlyric) {
-            processedLyrics = lrctran(response.lyric, response.tlyric);
+    try {
+        const response = await $.post(ml_song_info_post_url_base + '/Song_V1', {
+            url: song.id,
+            level: ml_selected_level,
+            type: 'json'
+        });
+
+        if (response.status === 200) {
+            // 获取歌曲信息成功，更新进度（10%）
+            infoFetched = true;
+            ml_download_state.currentIndex += 0.1;
+            ml_update_progress_ui();
+
+            let processedLyrics = response.lyric;
+            if (response.tlyric) {
+                processedLyrics = lrctran(response.lyric, response.tlyric);
+            }
+            await ml_music_download(
+                response.al_name,
+                response.ar_name,
+                processedLyrics,
+                response.name,
+                response.pic,
+                response.url,
+                ml_selected_level
+            );
+            return { success: true, song: song, infoFetched: true };
+        } else {
+            return { success: false, song: song, infoFetched: false, error: new Error(response.msg || '下载失败') };
         }
-        await ml_music_download(
-            response.al_name,
-            response.ar_name,
-            processedLyrics,
-            response.name,
-            response.pic,
-            response.url,
-            ml_selected_level
-        );
-        return { success: true, song: song };
-    } else {
-        throw new Error(response.msg || '下载失败');
+    } catch (error) {
+        return { success: false, song: song, infoFetched: infoFetched, error: error };
     }
 }
 
@@ -595,11 +843,17 @@ async function ml_donwload_song_list(ml_selected_level){
     ml_download_state.isDownloading = true;
     ml_download_state.isPaused = false;
     ml_download_state.currentIndex = 0;
+    ml_download_state.completedCount = 0;
     ml_download_state.totalCount = ml_song_list.length;
     ml_download_state.successCount = 0;
     ml_download_state.failedCount = 0;
     ml_download_state.failedSongs = [];
     ml_download_state.containerSelector = containerSelector;
+    ml_download_state.startTime = Date.now();
+    ml_download_state.pauseStartTime = null;
+    // 重置 EMA 状态
+    ml_download_state.emaSpeed = null;
+    ml_download_state.speedHistory = [];
 
     // 设置按钮加载状态
     ml_set_button_state(`${containerSelector} [id^="download_all"]`, true, '下载中...');
@@ -608,7 +862,8 @@ async function ml_donwload_song_list(ml_selected_level){
     ml_show_download_controls(containerSelector, true);
     ml_update_progress_ui();
 
-    console.log(`开始批量下载，共 ${ml_song_list.length} 首歌曲，并行数: ${ML_PARALLEL_DOWNLOAD_COUNT}`);
+    const concurrentCount = ml_get_concurrent_count();
+    console.log(`开始批量下载，共 ${ml_song_list.length} 首歌曲，并行数: ${concurrentCount}`);
 
     let songQueue = [...ml_song_list];
     let attempt = 0;
@@ -622,7 +877,7 @@ async function ml_donwload_song_list(ml_selected_level){
             const currentRoundFailed = [];
 
             // 分批并行下载
-            for (let i = 0; i < songQueue.length && ml_download_state.isDownloading; i += ML_PARALLEL_DOWNLOAD_COUNT) {
+            for (let i = 0; i < songQueue.length && ml_download_state.isDownloading; i += concurrentCount) {
                 // 检查是否暂停
                 while (ml_download_state.isPaused && ml_download_state.isDownloading) {
                     console.log('下载已暂停，等待继续...');
@@ -636,23 +891,37 @@ async function ml_donwload_song_list(ml_selected_level){
                 }
 
                 // 获取当前批次的歌曲
-                const batch = songQueue.slice(i, i + ML_PARALLEL_DOWNLOAD_COUNT);
-                console.log(`正在下载批次 ${Math.floor(i / ML_PARALLEL_DOWNLOAD_COUNT) + 1}，包含 ${batch.length} 首歌曲`);
+                const batch = songQueue.slice(i, i + concurrentCount);
+                console.log(`正在下载批次 ${Math.floor(i / concurrentCount) + 1}，包含 ${batch.length} 首歌曲`);
 
-                // 并行下载当前批次
+                // 并行下载当前批次，每首完成时立即更新进度
                 const downloadPromises = batch.map(async (song) => {
                     // 在每个下载任务中也检查取消状态
                     if (!ml_download_state.isDownloading) {
-                        return { success: false, song: song, cancelled: true };
+                        return { success: false, song: song, cancelled: true, infoFetched: false };
                     }
-                    try {
-                        await ml_download_single_song(song, ml_selected_level);
-                        console.log(`✅ 成功下载: ${song.name}`);
-                        return { success: true, song: song };
-                    } catch (error) {
-                        console.error(`❌ 下载失败: ${song.name}`, error);
-                        return { success: false, song: song, error: error };
+                    const result = await ml_download_single_song(song, ml_selected_level);
+
+                    // 下载完成后立即更新进度（不等待其他并行任务）
+                    if (!result.cancelled && ml_download_state.isDownloading) {
+                        ml_download_state.completedCount++;
+                        if (result.success) {
+                            ml_download_state.currentIndex += 0.9;
+                            ml_download_state.successCount++;
+                            console.log(`✅ 成功下载: ${song.name}`);
+                        } else {
+                            if (result.infoFetched) {
+                                ml_download_state.currentIndex += 0.9;
+                            } else {
+                                ml_download_state.currentIndex += 1;
+                            }
+                            ml_download_state.failedCount++;
+                            console.error(`❌ 下载失败: ${song.name}`, result.error);
+                        }
+                        ml_update_progress_ui();
                     }
+
+                    return result;
                 });
 
                 // 等待当前批次完成
@@ -664,17 +933,12 @@ async function ml_donwload_song_list(ml_selected_level){
                     break;
                 }
 
-                // 处理结果
+                // 收集失败的歌曲用于重试
                 results.forEach(result => {
-                    if (result.cancelled) return; // 跳过已取消的
-                    ml_download_state.currentIndex++;
-                    if (result.success) {
-                        ml_download_state.successCount++;
-                    } else {
-                        ml_download_state.failedCount++;
+                    if (result.cancelled) return;
+                    if (!result.success) {
                         currentRoundFailed.push(result.song);
                     }
-                    ml_update_progress_ui();
                 });
             }
 
@@ -686,6 +950,7 @@ async function ml_donwload_song_list(ml_selected_level){
             if (songQueue.length > 0) {
                 // 重置索引用于重试显示
                 ml_download_state.currentIndex = ml_download_state.totalCount - songQueue.length;
+                ml_download_state.completedCount = ml_download_state.totalCount - songQueue.length;
                 ml_download_state.failedCount = 0;
             }
             attempt++;

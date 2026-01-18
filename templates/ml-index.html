@@ -116,12 +116,18 @@
             line-height: 1 !important;
         }
         .ml-download-controls .ml-progress-text,
-        .ml-download-controls .ml-progress-percent {
+        .ml-download-controls .ml-progress-percent,
+        .ml-download-controls .ml-progress-eta {
             display: inline-flex;
             align-items: center;
             height: 30px;
             margin: 0;
             line-height: 1;
+        }
+        .ml-download-controls .ml-progress-percent,
+        .ml-download-controls .ml-progress-eta {
+            font-variant-numeric: tabular-nums;
+            font-feature-settings: "tnum";
         }
         /* 遮罩层样式 */
         .ml-overlay {
@@ -249,17 +255,23 @@
                 <form id="main-form">
                     <div class="mb-3">
                         <!-- 音质选择区域 -->
-                        <div class="mb-3">
-                            <label for="level" class="form-label">音质选择</label>
-                            <select id="level" class="form-select">
-                                <option value="standard">标准音质</option>
-                                <option value="exhigh">极高音质</option>
-                                <option value="lossless">无损音质</option>
-                                <option value="hires">Hires音质</option>
-                                <option value="sky">沉浸环绕声</option>
-                                <option value="jyeffect">高清环绕声</option>
-                                <option value="jymaster">超清母带</option>
-                            </select>
+                        <div class="row mb-3">
+                            <div class="col-md-9">
+                                <label for="level" class="form-label">音质选择</label>
+                                <select id="level" class="form-select">
+                                    <option value="standard">标准音质</option>
+                                    <option value="exhigh">极高音质</option>
+                                    <option value="lossless">无损音质</option>
+                                    <option value="hires">Hires音质</option>
+                                    <option value="sky">沉浸环绕声</option>
+                                    <option value="jyeffect">高清环绕声</option>
+                                    <option value="jymaster">超清母带</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="concurrent-downloads" class="form-label">最大同时下载数</label>
+                                <input type="number" id="concurrent-downloads" class="form-control" value="3" min="1" max="10">
+                            </div>
                         </div>
                         <!-- 功能选择标签页 -->
                         <div class="border-bottom mb-4">
@@ -349,7 +361,9 @@
                         <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
                         <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
                         <span class="ml-progress-text text-muted small">准备中...</span>
-                        <span class="ml-progress-percent fw-bold ms-auto">0%</span>
+                        <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
+                        <span class="ml-progress-eta text-muted small">计算中...</span>
+                        <span class="ml-progress-speed text-muted small ms-2"></span>
                     </div>
                     <div class="progress" style="height: 6px; border-radius: 3px;">
                         <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
@@ -400,7 +414,8 @@
                                 <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
                                 <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
                                 <span class="ml-progress-text text-muted small">准备中...</span>
-                                <span class="ml-progress-percent fw-bold ms-auto">0%</span>
+                                <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
+                                <span class="ml-progress-eta text-muted small">计算中...</span>
                             </div>
                             <div class="progress" style="height: 6px; border-radius: 3px;">
                                 <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
@@ -434,7 +449,8 @@
                                 <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
                                 <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
                                 <span class="ml-progress-text text-muted small">准备中...</span>
-                                <span class="ml-progress-percent fw-bold ms-auto">0%</span>
+                                <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
+                                <span class="ml-progress-eta text-muted small">计算中...</span>
                             </div>
                             <div class="progress" style="height: 6px; border-radius: 3px;">
                                 <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
@@ -672,6 +688,19 @@
                 });
                 activateTab('search');
             })();
+
+            // 监听并行下载数输入
+            $('#concurrent-downloads').on('change blur', function() {
+                let val = parseInt($(this).val());
+                const min = parseInt($(this).attr('min'));
+                const max = parseInt($(this).attr('max'));
+                if (isNaN(val) || val < min) {
+                    val = min;
+                } else if (val > max) {
+                    val = max;
+                }
+                $(this).val(val);
+            });
 
             // 搜索功能
             $('#search-btn').on('click', function() {
