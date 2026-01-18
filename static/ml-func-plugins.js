@@ -392,6 +392,38 @@ var ml_song_list = [];
 var ml_first_song_detailed_info = {};
 const ml_max_try_times = 5;
 
+// 下载状态管理
+var ml_download_state = {
+    isDownloading: false,      // 是否正在下载
+    isPaused: false,           // 是否暂停
+    currentIndex: 0,           // 当前下载索引
+    totalCount: 0,             // 总歌曲数
+    successCount: 0,           // 成功数
+    failedCount: 0,            // 失败数
+    failedSongs: [],           // 失败的歌曲列表
+    abortController: null,     // 用于取消请求
+    containerSelector: null    // 当前活动的容器选择器
+};
+
+// 并行下载配置
+const ML_PARALLEL_DOWNLOAD_COUNT = 3; // 同时下载的歌曲数量
+
+// 更新进度条UI
+function ml_update_progress_ui() {
+    const state = ml_download_state;
+    const progress = state.totalCount > 0 ? Math.round((state.currentIndex / state.totalCount) * 100) : 0;
+
+    // 获取当前活动容器中的控制区域
+    const $controls = state.containerSelector ? $(state.containerSelector).find('.ml-download-controls') : $('.ml-download-controls');
+
+    // 更新进度条
+    $controls.find('.ml-progress-bar').css('width', progress + '%').attr('aria-valuenow', progress);
+    $controls.find('.ml-progress-text').text(`${state.currentIndex}/${state.totalCount} (成功: ${state.successCount}, 失败: ${state.failedCount})`);
+
+    // 更新进度百分比
+    $controls.find('.ml-progress-percent').text(progress + '%');
+}
+
 // 设置按钮状态
 function ml_set_button_state(buttonSelector, isLoading, loadingText = '处理中...') {
     const $btn = $(buttonSelector);
@@ -411,6 +443,105 @@ function ml_set_button_state(buttonSelector, isLoading, loadingText = '处理中
     }
 }
 
+// 显示/隐藏暂停按钮和进度条（使用预定义的HTML元素）
+function ml_show_download_controls(containerSelector, show) {
+    const $container = $(containerSelector);
+    const $controls = $container.find('.ml-download-controls');
+
+    if (show) {
+        // 存储当前容器选择器到全局状态
+        ml_download_state.containerSelector = containerSelector;
+
+        // 显示控制区域
+        $controls.removeClass('d-none');
+
+        // 重置进度条状态
+        $controls.find('.ml-progress-bar').css('width', '0%').attr('aria-valuenow', 0);
+        $controls.find('.ml-progress-text').text('准备中...');
+        $controls.find('.ml-progress-percent').text('0%');
+        $controls.find('.ml-pause-btn').text('暂停下载').removeClass('btn-success').addClass('btn-warning');
+
+        // 绑定暂停按钮事件
+        $controls.find('.ml-pause-btn').off('click').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (ml_download_state.isPaused) {
+                ml_download_state.isPaused = false;
+                $(this).text('暂停下载').removeClass('btn-success').addClass('btn-warning');
+                console.log('下载已继续');
+                // 触发继续下载事件
+                $(document).trigger('ml-download-resume');
+            } else {
+                ml_download_state.isPaused = true;
+                $(this).text('继续下载').removeClass('btn-warning').addClass('btn-success');
+                console.log('下载已暂停');
+            }
+        });
+
+        // 绑定取消按钮事件
+        $controls.find('.ml-cancel-btn').off('click').on('click', async function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const confirmed = await ml_show_Confirm('取消下载', '确定要取消下载吗？');
+            if (confirmed) {
+                const currentContainer = ml_download_state.containerSelector;
+                ml_download_state.isPaused = false;
+                ml_download_state.isDownloading = false;
+                // 触发继续事件以解除等待
+                $(document).trigger('ml-download-resume');
+                ml_show_download_controls(currentContainer, false);
+                ml_set_button_state(`${currentContainer} [id^="download_all"]`, false);
+                console.log('下载已取消');
+            }
+        });
+    } else {
+        // 隐藏控制区域
+        $controls.addClass('d-none');
+        ml_download_state.containerSelector = null;
+    }
+}
+
+// 等待暂停解除
+function ml_wait_for_resume() {
+    return new Promise((resolve) => {
+        // 如果没有暂停或已取消下载，立即返回
+        if (!ml_download_state.isPaused || !ml_download_state.isDownloading) {
+            resolve();
+            return;
+        }
+
+        // 使用事件监听和定时器双重机制确保可靠性
+        let resolved = false;
+
+        const cleanup = () => {
+            if (!resolved) {
+                resolved = true;
+                $(document).off('ml-download-resume', resumeHandler);
+                clearInterval(checkInterval);
+                resolve();
+            }
+        };
+
+        const resumeHandler = () => {
+            console.log('收到继续下载事件');
+            cleanup();
+        };
+
+        // 监听继续事件
+        $(document).on('ml-download-resume', resumeHandler);
+
+        // 定时检查状态（作为备份机制）
+        const checkInterval = setInterval(() => {
+            if (!ml_download_state.isPaused || !ml_download_state.isDownloading) {
+                console.log('检测到状态变化，继续下载');
+                cleanup();
+            }
+        }, 200);
+    });
+}
+
 // 获取当前活动的结果容器选择器
 function ml_get_active_result_container() {
     if (!$('#search-result').hasClass('d-none')) return '#search-result';
@@ -419,47 +550,174 @@ function ml_get_active_result_container() {
     return null;
 }
 
-async function ml_donwload_song_list(ml_selected_level){
-    let unsuccessfulSongs = [...ml_song_list]; // Copy the original list
-    let attempt = 0;
-    while (unsuccessfulSongs.length > 0 && attempt < ml_max_try_times) {
-        console.log(`下载尝试 ${attempt + 1}，剩余歌曲数: ${unsuccessfulSongs.length}`);
-        console.log(unsuccessfulSongs);
-        const currentUnsuccessful = [];
-        for (const song of unsuccessfulSongs) {
-            try {
-                const response = await $.post(ml_song_info_post_url_base + '/Song_V1', { url: song.id, level: ml_selected_level, type: 'json' });
-                console.log(response);
-                if (response.status === 200) {
-                    let processedLyrics = response.lyric;
-                    if (response.tlyric) {
-                        processedLyrics = lrctran(response.lyric, response.tlyric);
-                    }
-                    await ml_music_download(
-                        response.al_name,
-                        response.ar_name,
-                        processedLyrics,
-                        response.name,
-                        response.pic,
-                        response.url,
-                        ml_selected_level
-                    );
-                } else {
-                    console.error(`Error downloading song ${song.name}: ${response.msg}`);
-                    currentUnsuccessful.push(song); // Keep for next attempt
-                }
-            } catch (error) {
-                console.error(`Error processing song ${song.name}:`, error);
-                currentUnsuccessful.push(song); // Keep for next attempt
-            }
+// 并行下载单首歌曲
+async function ml_download_single_song(song, ml_selected_level) {
+    const response = await $.post(ml_song_info_post_url_base + '/Song_V1', {
+        url: song.id,
+        level: ml_selected_level,
+        type: 'json'
+    });
+
+    if (response.status === 200) {
+        let processedLyrics = response.lyric;
+        if (response.tlyric) {
+            processedLyrics = lrctran(response.lyric, response.tlyric);
         }
-        unsuccessfulSongs = currentUnsuccessful; // Update the list for the next attempt
-        attempt++;
-    }
-    if (unsuccessfulSongs.length > 0) {
-        console.log(`以下歌曲下载失败，请稍后重试:\n${unsuccessfulSongs.map(s => s.name).join('\n')}`);
-        alert(`以下歌曲下载失败，请稍后重试:\n${unsuccessfulSongs.map(s => s.name).join('\n')}`);
+        await ml_music_download(
+            response.al_name,
+            response.ar_name,
+            processedLyrics,
+            response.name,
+            response.pic,
+            response.url,
+            ml_selected_level
+        );
+        return { success: true, song: song };
     } else {
-        alert("所有歌曲已成功下载！");
+        throw new Error(response.msg || '下载失败');
+    }
+}
+
+async function ml_donwload_song_list(ml_selected_level){
+    // 防止重复点击
+    if (ml_download_state.isDownloading) {
+        console.warn('下载正在进行中，请等待完成或取消当前下载。');
+        return;
+    }
+
+    const containerSelector = ml_get_active_result_container();
+    if (!containerSelector) {
+        console.error('未找到活动的结果容器');
+        return;
+    }
+
+    // 初始化下载状态
+    ml_download_state.isDownloading = true;
+    ml_download_state.isPaused = false;
+    ml_download_state.currentIndex = 0;
+    ml_download_state.totalCount = ml_song_list.length;
+    ml_download_state.successCount = 0;
+    ml_download_state.failedCount = 0;
+    ml_download_state.failedSongs = [];
+    ml_download_state.containerSelector = containerSelector;
+
+    // 设置按钮加载状态
+    ml_set_button_state(`${containerSelector} [id^="download_all"]`, true, '下载中...');
+
+    // 显示进度条和控制按钮
+    ml_show_download_controls(containerSelector, true);
+    ml_update_progress_ui();
+
+    console.log(`开始批量下载，共 ${ml_song_list.length} 首歌曲，并行数: ${ML_PARALLEL_DOWNLOAD_COUNT}`);
+
+    let songQueue = [...ml_song_list];
+    let attempt = 0;
+
+    try {
+        while (songQueue.length > 0 && attempt < ml_max_try_times && ml_download_state.isDownloading) {
+            if (attempt > 0) {
+                console.log(`重试第 ${attempt} 次，剩余失败歌曲: ${songQueue.length}`);
+            }
+
+            const currentRoundFailed = [];
+
+            // 分批并行下载
+            for (let i = 0; i < songQueue.length && ml_download_state.isDownloading; i += ML_PARALLEL_DOWNLOAD_COUNT) {
+                // 检查是否暂停
+                while (ml_download_state.isPaused && ml_download_state.isDownloading) {
+                    console.log('下载已暂停，等待继续...');
+                    await ml_wait_for_resume();
+                }
+
+                // 如果取消了就退出
+                if (!ml_download_state.isDownloading) {
+                    console.log('下载已取消，退出循环');
+                    break;
+                }
+
+                // 获取当前批次的歌曲
+                const batch = songQueue.slice(i, i + ML_PARALLEL_DOWNLOAD_COUNT);
+                console.log(`正在下载批次 ${Math.floor(i / ML_PARALLEL_DOWNLOAD_COUNT) + 1}，包含 ${batch.length} 首歌曲`);
+
+                // 并行下载当前批次
+                const downloadPromises = batch.map(async (song) => {
+                    // 在每个下载任务中也检查取消状态
+                    if (!ml_download_state.isDownloading) {
+                        return { success: false, song: song, cancelled: true };
+                    }
+                    try {
+                        await ml_download_single_song(song, ml_selected_level);
+                        console.log(`✅ 成功下载: ${song.name}`);
+                        return { success: true, song: song };
+                    } catch (error) {
+                        console.error(`❌ 下载失败: ${song.name}`, error);
+                        return { success: false, song: song, error: error };
+                    }
+                });
+
+                // 等待当前批次完成
+                const results = await Promise.all(downloadPromises);
+
+                // 如果已取消，不再处理结果
+                if (!ml_download_state.isDownloading) {
+                    console.log('下载已取消，跳过结果处理');
+                    break;
+                }
+
+                // 处理结果
+                results.forEach(result => {
+                    if (result.cancelled) return; // 跳过已取消的
+                    ml_download_state.currentIndex++;
+                    if (result.success) {
+                        ml_download_state.successCount++;
+                    } else {
+                        ml_download_state.failedCount++;
+                        currentRoundFailed.push(result.song);
+                    }
+                    ml_update_progress_ui();
+                });
+            }
+
+            // 如果已取消，退出重试循环
+            if (!ml_download_state.isDownloading) break;
+
+            // 更新失败列表用于下一轮重试
+            songQueue = currentRoundFailed;
+            if (songQueue.length > 0) {
+                // 重置索引用于重试显示
+                ml_download_state.currentIndex = ml_download_state.totalCount - songQueue.length;
+                ml_download_state.failedCount = 0;
+            }
+            attempt++;
+        }
+    } finally {
+        // 记录最终失败的歌曲
+        ml_download_state.failedSongs = songQueue;
+
+        const wasDownloading = ml_download_state.isDownloading;
+        const successCount = ml_download_state.successCount;
+        const failedSongs = [...ml_download_state.failedSongs];
+
+        // 下载完成，恢复按钮状态
+        ml_download_state.isDownloading = false;
+        ml_set_button_state(`${containerSelector} [id^="download_all"]`, false);
+
+        // 延迟隐藏进度条，让用户看到最终结果
+        setTimeout(() => {
+            ml_show_download_controls(containerSelector, false);
+        }, wasDownloading ? 3000 : 500);
+
+        // 只有正常完成时才显示结果（取消时不显示）
+        if (wasDownloading) {
+            if (failedSongs.length > 0) {
+                const failedNames = failedSongs.map(s => s.name).join('\n');
+                console.log(`以下歌曲下载失败，请稍后重试:\n${failedNames}`);
+                ml_show_Alert('下载完成', `成功: ${successCount} 首\n失败: ${failedSongs.length} 首\n\n失败的歌曲:\n${failedNames}`, 'warning');
+            } else if (successCount > 0) {
+                ml_show_Alert('下载完成', `所有 ${successCount} 首歌曲已成功下载！`, 'success');
+            }
+        } else {
+            console.log(`下载已取消。已完成: ${successCount} 首`);
+        }
     }
 };

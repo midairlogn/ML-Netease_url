@@ -95,6 +95,34 @@
         display: inline-block;
         margin: 5px; /* 可选：添加按钮之间的间距 */
         }
+        /* 下载控制区域样式 */
+        .ml-download-controls {
+            text-align: left;
+        }
+        .ml-download-controls .d-flex {
+            min-height: 32px;
+        }
+        .ml-download-controls .btn,
+        .ml-download-controls .ml-pause-btn,
+        .ml-download-controls .ml-cancel-btn {
+            vertical-align: middle !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            height: 30px !important;
+            margin: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            line-height: 1 !important;
+        }
+        .ml-download-controls .ml-progress-text,
+        .ml-download-controls .ml-progress-percent {
+            display: inline-flex;
+            align-items: center;
+            height: 30px;
+            margin: 0;
+            line-height: 1;
+        }
         /* 遮罩层样式 */
         .ml-overlay {
             position: fixed;
@@ -315,6 +343,19 @@
             <div class="button-container">
                 <button id="download_all_MusicButton_search" class="btn btn-primary mt-3">Download All</button>
                 <button id="play_all_search" class="btn btn-primary mt-3">Play All</button>
+                <!-- 下载控制区域 -->
+                <div class="ml-download-controls d-none mt-3">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
+                        <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
+                        <span class="ml-progress-text text-muted small">准备中...</span>
+                        <span class="ml-progress-percent fw-bold ms-auto">0%</span>
+                    </div>
+                    <div class="progress" style="height: 6px; border-radius: 3px;">
+                        <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                             role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                </div>
             </div>
             <ul class="list-group" id="search-list"></ul>
         </div>
@@ -353,6 +394,19 @@
                     <div class="button-container">
                         <button id="download_all_MusicButton_playlist" class="btn btn-primary mt-3">Download All</button>
                         <button id="play_all_playlist" class="btn btn-primary mt-3">Play All</button>
+                        <!-- 下载控制区域 -->
+                        <div class="ml-download-controls d-none mt-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
+                                <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
+                                <span class="ml-progress-text text-muted small">准备中...</span>
+                                <span class="ml-progress-percent fw-bold ms-auto">0%</span>
+                            </div>
+                            <div class="progress" style="height: 6px; border-radius: 3px;">
+                                <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                     role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -374,6 +428,19 @@
                     <div class="button-container">
                         <button id="download_all_MusicButton_album" class="btn btn-primary mt-3">Download All</button>
                         <button id="play_all_album" class="btn btn-primary mt-3">Play All</button>
+                        <!-- 下载控制区域 -->
+                        <div class="ml-download-controls d-none mt-3">
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
+                                <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
+                                <span class="ml-progress-text text-muted small">准备中...</span>
+                                <span class="ml-progress-percent fw-bold ms-auto">0%</span>
+                            </div>
+                            <div class="progress" style="height: 6px; border-radius: 3px;">
+                                <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                     role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
