@@ -383,7 +383,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
 
     } catch (error) {
         console.error("下载或处理音乐文件时发生错误:", error);
-        alert("下载音乐时发生错误，请查看控制台获取详情。");
+        ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');
     }
 };
 

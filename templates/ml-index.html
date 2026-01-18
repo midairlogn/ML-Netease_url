@@ -95,6 +95,122 @@
         display: inline-block;
         margin: 5px; /* 可选：添加按钮之间的间距 */
         }
+        /* 遮罩层样式 */
+        .ml-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .ml-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        /* 自定义警告对话框样式 */
+        .custom-alert {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            width: 90%;
+            max-width: 400px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+            z-index: 1000;
+            overflow: hidden;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s ease;
+        }
+        .custom-alert.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .custom-alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        .custom-alert-title {
+            font-size: 1.25em;
+            font-weight: 600;
+            color: #343a40;
+            margin: 0;
+        }
+        .custom-alert-close {
+            background: none;
+            border: none;
+            font-size: 1.5em;
+            color: #6c757d;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            transition: color 0.2s ease;
+        }
+        .custom-alert-close:hover {
+            color: #343a40;
+        }
+        .custom-alert-content {
+            padding: 20px;
+            color: #495057;
+            line-height: 1.6;
+            font-size: 1em;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .custom-alert-message {
+            margin-bottom: 0;
+            white-space: pre-wrap;
+        }
+        .custom-alert-footer {
+            padding: 15px 20px;
+            border-top: 1px solid #e9ecef;
+            background-color: #f8f9fa;
+            text-align: right;
+        }
+        .custom-alert-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            box-shadow: 0 2px 5px rgba(0, 123, 255, 0.2);
+            transition: background-color 0.2s ease, box-shadow 0.2s ease;
+        }
+        .custom-alert-button:hover {
+            background-color: #0056b3;
+            box-shadow: 0 4px 10px rgba(0, 123, 255, 0.3);
+        }
+        /* 取消按钮样式 */
+        .custom-alert-cancel {
+            background-color: #6c757d;
+            margin-right: 10px;
+        }
+        .custom-alert-cancel:hover {
+            background-color: #5a6268;
+            box-shadow: 0 4px 10px rgba(108, 117, 125, 0.3);
+        }
+        /* 成功/错误/警告样式 */
+        .custom-alert-header.success { background-color: #d4edda; border-color: #c3e6cb; }
+        .custom-alert-header.success .custom-alert-title { color: #155724; }
+        .custom-alert-header.error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .custom-alert-header.error .custom-alert-title { color: #721c24; }
+        .custom-alert-header.warning { background-color: #fff3cd; border-color: #ffeeba; }
+        .custom-alert-header.warning .custom-alert-title { color: #856404; }
     </style>
 </head>
 <body>
@@ -278,6 +394,21 @@
             </div>
         </div>
     </div>
+    <!-- 自定义警告对话框 -->
+    <div class="ml-overlay" id="ml_overlay"></div>
+    <div class="custom-alert" id="ml_Alert_region">
+        <div class="custom-alert-header" id="ml_Alert_Header">
+            <h3 class="custom-alert-title" id="ml_Alert_Title">提示</h3>
+            <button class="custom-alert-close" onclick="ml_hide_Alert()">&times;</button>
+        </div>
+        <div class="custom-alert-content">
+            <p class="custom-alert-message" id="ml_Alert_Message"></p>
+        </div>
+        <div class="custom-alert-footer">
+            <button class="custom-alert-button custom-alert-cancel d-none" id="ml_Alert_Cancel">取消</button>
+            <button class="custom-alert-button" id="ml_Alert_Confirm">确定</button>
+        </div>
+    </div>
     <footer class="footer mt-5 py-3 bg-light border-top">
         <div class="container text-center text-muted small">
             <span><a href="https://github.com/midairlogn/ML-Netease_url" target="_blank">ML Netease Toolkit</a> &copy; 2025 | MIT LICENSE | Presented by <a href="https://github.com/midairlogn" target="_blank">Midairlogn</a></span>
@@ -296,6 +427,87 @@
     <!-- 引入 ml 下载函数 (./ml-js-plugins/ml-func-plugins.js) -->
     <script src="{{ url_for('static', filename='ml-flac-writer.js') }}"></script>
     <script src="{{ url_for('static', filename='ml-func-plugins.js') }}"></script>
+
+    <!-- 自定义弹窗函数 -->
+    <script>
+        // 用于存储confirm回调
+        var ml_confirm_resolve = null;
+
+        // 显示自定义弹窗（仅确定按钮）
+        // type: 'info' (默认), 'success', 'error', 'warning'
+        function ml_show_Alert(title, message, type = 'info') {
+            document.getElementById('ml_Alert_Title').textContent = title;
+            document.getElementById('ml_Alert_Message').textContent = message;
+
+            // 设置头部样式
+            const header = document.getElementById('ml_Alert_Header');
+            header.classList.remove('success', 'error', 'warning');
+            if (type !== 'info') {
+                header.classList.add(type);
+            }
+
+            // 隐藏取消按钮（普通弹窗只需确定按钮）
+            document.getElementById('ml_Alert_Cancel').classList.add('d-none');
+
+            // 重置回调
+            ml_confirm_resolve = null;
+
+            // 显示弹窗
+            document.getElementById('ml_Alert_region').classList.add('show');
+            document.getElementById('ml_overlay').classList.add('show');
+        }
+
+        // 显示确认弹窗（确定+取消按钮），返回Promise
+        // type: 'info' (默认), 'warning'
+        function ml_show_Confirm(title, message, type = 'warning') {
+            return new Promise((resolve) => {
+                document.getElementById('ml_Alert_Title').textContent = title;
+                document.getElementById('ml_Alert_Message').textContent = message;
+
+                // 设置头部样式
+                const header = document.getElementById('ml_Alert_Header');
+                header.classList.remove('success', 'error', 'warning');
+                if (type !== 'info') {
+                    header.classList.add(type);
+                }
+
+                // 显示取消按钮
+                document.getElementById('ml_Alert_Cancel').classList.remove('d-none');
+
+                // 存储回调
+                ml_confirm_resolve = resolve;
+
+                // 显示弹窗
+                document.getElementById('ml_Alert_region').classList.add('show');
+                document.getElementById('ml_overlay').classList.add('show');
+            });
+        }
+
+        // 隐藏自定义弹窗
+        function ml_hide_Alert(result = false) {
+            document.getElementById('ml_Alert_region').classList.remove('show');
+            document.getElementById('ml_overlay').classList.remove('show');
+
+            // 如果有确认回调，调用它
+            if (ml_confirm_resolve) {
+                ml_confirm_resolve(result);
+                ml_confirm_resolve = null;
+            }
+        }
+
+        // 绑定按钮事件
+        document.getElementById('ml_Alert_Confirm').addEventListener('click', function() {
+            ml_hide_Alert(true);
+        });
+        document.getElementById('ml_Alert_Cancel').addEventListener('click', function() {
+            ml_hide_Alert(false);
+        });
+
+        // 点击遮罩层关闭弹窗（视为取消）
+        document.getElementById('ml_overlay').addEventListener('click', function() {
+            ml_hide_Alert(false);
+        });
+    </script>
 
     <script>
         $(document).ready(function() {
@@ -401,7 +613,7 @@
                 const limit = $('#search_limit').val();
                 ml_search_real_url = ml_song_info_post_url_base + '/Search';
                 if (!keywords) {
-                    alert('请输入搜索关键词');
+                    ml_show_Alert('提示', '请输入搜索关键词', 'warning');
                     return;
                 }
                 // 设置按钮加载状态
@@ -478,7 +690,7 @@
                 const level = $('#level').val();
                 ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
                 if (!songIds) {
-                    alert('请输入歌曲ID或URL');
+                    ml_show_Alert('提示', '请输入歌曲ID或URL', 'warning');
                     return;
                 }
                 // 设置按钮加载状态
@@ -531,7 +743,7 @@
                             });
                         });
                     } else {
-                        alert(data.msg);
+                        ml_show_Alert('解析失败', data.msg, 'error');
                     }
                 }, 'json').always(function() {
                     // 恢复按钮状态
@@ -552,7 +764,7 @@
                 let pid = $('#playlist_id').val().trim();
                 ml_get_playlist_real_url = ml_song_info_post_url_base + '/Playlist';
                 if (!pid) {
-                    alert('请输入歌单ID或链接');
+                    ml_show_Alert('提示', '请输入歌单ID或链接', 'warning');
                     return;
                 }
                 // 支持直接粘贴歌单链接
@@ -609,7 +821,7 @@
                 let aid = $('#album_id').val().trim();
                 ml_get_album_real_url = ml_song_info_post_url_base + '/Album';
                 if (!aid) {
-                    alert('请输入专辑ID或链接');
+                    ml_show_Alert('提示', '请输入专辑ID或链接', 'warning');
                     return;
                 }
                 // 支持直接粘贴专辑链接
