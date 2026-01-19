@@ -1,0 +1,459 @@
+/* Global Styles */
+body {
+    background-color: #f0f2f5;
+    color: #333;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+.container {
+    max-width: 850px;
+}
+
+/* Card Styling */
+.card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
+}
+
+/* Typography */
+h1 {
+    font-weight: 700;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin-bottom: 1.5rem;
+}
+
+/* Form Elements */
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-control, .form-select {
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    padding: 10px 15px;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
+}
+
+/* Buttons */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.btn:active {
+    transform: translateY(1px);
+    box-shadow: none;
+}
+
+.btn-primary {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.btn-primary:hover {
+    background-color: #0069d9;
+    border-color: #0062cc;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,123,255,0.3);
+}
+
+.btn-success {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+.btn-success:hover {
+    background-color: #218838;
+    border-color: #1e7e34;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(40,167,69,0.3);
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+    border-color: #d39e00;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(255,193,7,0.3);
+}
+
+/* Navigation Tabs */
+.nav-link {
+    color: #6c757d;
+    font-weight: 500;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    padding: 10px 20px;
+    transition: all 0.2s ease;
+}
+
+.tab-item {
+    position: relative;
+    transition: color 0.2s ease;
+}
+
+.tab-item:hover {
+    color: #007bff !important;
+}
+
+.tab-item[aria-current="page"] {
+    color: #007bff !important;
+}
+
+.tab-item::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background-color: #007bff;
+    transition: width 0.3s ease;
+}
+
+.tab-item[aria-current="page"]::after {
+    width: 100%;
+}
+
+/* Song Info & Results */
+#song-info {
+    margin-top: 25px;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+#song-info img {
+    max-width: 100%;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.alert-info {
+    background-color: #e3f2fd;
+    color: #055160;
+    border: 1px solid #b6effb;
+}
+
+.song-title, .playlist-title {
+    display: inline-block;
+    max-width: 250px;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* List Groups */
+.list-group-item {
+    border: none;
+    border-bottom: 1px solid #f0f0f0;
+    padding: 12px 20px;
+    transition: background-color 0.2s;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa;
+}
+
+.list-group-item .select-song {
+    flex-shrink: 0;
+    margin-left: 15px;
+    border-radius: 20px;
+    padding: 4px 12px;
+}
+
+/* Lyric Box */
+.lyric-box {
+    max-height: 250px;
+    overflow-y: auto;
+    background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    padding: 15px 20px;
+    font-size: 15px;
+    color: #495057;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+    line-height: 1.8;
+    margin-bottom: 0;
+    border: 1px solid #dee2e6;
+}
+
+/* Download Controls */
+.ml-download-controls {
+    text-align: left;
+    background: #fff;
+    padding: 15px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin-top: 15px;
+    border: 1px solid #f0f0f0;
+}
+
+.ml-download-controls .d-flex {
+    min-height: 32px;
+}
+
+.ml-download-controls .btn,
+.ml-download-controls .ml-pause-btn,
+.ml-download-controls .ml-cancel-btn {
+    vertical-align: middle !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 32px !important;
+    margin: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 1 !important;
+    border-radius: 16px;
+}
+
+.ml-download-controls .ml-progress-text,
+.ml-download-controls .ml-progress-percent,
+.ml-download-controls .ml-progress-eta {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    margin: 0;
+    line-height: 1;
+}
+
+.ml-download-controls .ml-progress-percent,
+.ml-download-controls .ml-progress-eta {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+}
+
+/* Button Container */
+.button-container {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.button-inline {
+    display: inline-block;
+    margin: 5px;
+}
+
+/* Overlay & Modals */
+.ml-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(2px);
+    z-index: 1040;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.ml-overlay.show {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Custom Alert */
+.custom-alert {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.95);
+    width: 90%;
+    max-width: 420px;
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+    z-index: 1050;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.custom-alert.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.custom-alert-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    background-color: #fff;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.custom-alert-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #333;
+    margin: 0;
+}
+
+.custom-alert-close {
+    background: none;
+    border: none;
+    font-size: 1.5em;
+    color: #adb5bd;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: color 0.2s ease;
+}
+
+.custom-alert-close:hover {
+    color: #495057;
+}
+
+.custom-alert-content {
+    padding: 24px;
+    color: #555;
+    line-height: 1.6;
+    font-size: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.custom-alert-message {
+    margin-bottom: 0;
+    white-space: pre-wrap;
+}
+
+.custom-alert-footer {
+    padding: 16px 24px;
+    border-top: 1px solid #f0f0f0;
+    background-color: #f8f9fa;
+    text-align: right;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
+}
+
+.custom-alert-button {
+    padding: 8px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.25);
+    transition: all 0.2s ease;
+}
+
+.custom-alert-button:hover {
+    background-color: #0069d9;
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.35);
+    transform: translateY(-1px);
+}
+
+.custom-alert-cancel {
+    background-color: #6c757d;
+    margin-right: 12px;
+    box-shadow: 0 2px 4px rgba(108, 117, 125, 0.25);
+}
+
+.custom-alert-cancel:hover {
+    background-color: #5a6268;
+    box-shadow: 0 4px 8px rgba(108, 117, 125, 0.35);
+}
+
+.custom-alert-header.success { background-color: #d1e7dd; color: #0f5132; }
+.custom-alert-header.error { background-color: #f8d7da; color: #842029; }
+.custom-alert-header.warning { background-color: #fff3cd; color: #664d03; }
+
+/* Custom Filename Section Improvements */
+.input-group-text {
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+}
+
+/* Footer */
+.footer {
+    background-color: #fff !important;
+    border-top: 1px solid #eaeaea !important;
+    margin-top: 60px !important;
+}
+
+.footer a {
+    color: #6c757d;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.footer a:hover {
+    color: #007bff;
+}
+
+/* Badge Tweaks */
+.badge {
+    padding: 0.5em 0.8em;
+    border-radius: 6px;
+}
+
+/* APlayer Customization */
+#aplayer {
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+    overflow: hidden;
+}
+
+/* Custom Radio Button Toggle (Separator) */
+input[name="separator-type"]:checked + label {
+    background-color: #0d6efd !important; /* Primary Blue */
+    color: #ffffff !important;           /* White Text */
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(13, 110, 253, 0.3); /* Add subtle shadow */
+}
+input[name="separator-type"]:checked + label:hover {
+    background-color: #0b5ed7 !important; /* Darker Blue on Hover */
+    color: #ffffff !important;
+}
+input[name="separator-type"] + label:hover {
+    background-color: #e9ecef; /* Light Grey for unchecked hover */
+    border-radius: 4px;
+}
+
+/* Fix for Custom Filename Buttons Hover */
+/* Force variable buttons to have visible text on hover */
+.filename-variable:hover {
+    background-color: #6c757d !important;
+    color: #fff !important;
+    border-color: #6c757d !important;
+}
+
+/* Force preset buttons to have visible text on hover (info style) */
+.filename-preset:hover {
+    background-color: #0dcaf0 !important;
+    color: #000 !important;
+    border-color: #0dcaf0 !important;
+}
