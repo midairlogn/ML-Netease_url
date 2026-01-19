@@ -275,6 +275,7 @@ function ml_update_filename_preview() {
 
     const filename = ml_customize_filename(template, mockMetadata);
     $('#filename-preview').text(`${filename}.${ext}`);
+    $('#filename-header-preview').text(`${filename}.${ext}`);
 }
 
 // 绑定事件监听器 (在页面加载完成后调用，或者在这里直接绑定如果 DOM 已就绪)
@@ -313,6 +314,22 @@ $(document).ready(function() {
         const val = $(this).data('value');
         $('#filename-template').val(val);
         ml_update_filename_preview();
+    });
+
+    // 监听清空按钮
+    $('#clear-filename-template').on('click', function() {
+        $('#filename-template').val('').focus();
+        ml_update_filename_preview();
+    });
+
+    // 监听折叠事件以旋转图标和控制 Header 预览显示
+    $('#filename-custom-body').on('show.bs.collapse', function () {
+        $('#filename-collapse-icon').css('transform', 'rotate(180deg)');
+        $('#filename-header-preview').fadeOut(200);
+    });
+    $('#filename-custom-body').on('hide.bs.collapse', function () {
+        $('#filename-collapse-icon').css('transform', 'rotate(0deg)');
+        $('#filename-header-preview').fadeIn(200);
     });
 
     // ---------------------------------------------------------
