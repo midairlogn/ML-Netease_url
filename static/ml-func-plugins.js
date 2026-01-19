@@ -221,6 +221,146 @@ function getCurrentLevel() {
     return levelSelect ? levelSelect.value : 'standard';
 }
 
+// ---------------------------------------------------------
+// 文件名自定义功能
+// ---------------------------------------------------------
+
+/**
+ * 根据模板生成文件名
+ * @param {string} template - 文件名模板 (e.g., "${artist} - ${title}")
+ * @param {object} metadata - 歌曲元数据 { title, artist, album }
+ * @returns {string} - 处理后的文件名
+ */
+function ml_customize_filename(template, metadata) {
+    if (!template || !template.trim()) {
+        template = "${title}_${artist}_${album}"; // 默认模板
+    }
+
+    let filename = template;
+
+    // 替换变量
+    filename = filename.replace(/\$\{title\}/g, metadata.title || '');
+    filename = filename.replace(/\$\{artist\}/g, metadata.artist || '');
+    filename = filename.replace(/\$\{album\}/g, metadata.album || '');
+
+    // 非法字符清洗
+    // Windows文件名非法字符: \ / : * ? " < > |
+    filename = filename.replace(/[\\/:*?"<>|]/g, '_');
+
+    // 移除首尾空格
+    filename = filename.trim();
+
+    // 如果文件名为空，回退到默认
+    if (!filename) {
+        filename = `${metadata.title}_${metadata.artist}_${metadata.album}`.replace(/[\\/:*?"<>|]/g, '_');
+    }
+
+    return filename;
+}
+
+/**
+ * 更新文件名预览
+ */
+function ml_update_filename_preview() {
+    const template = $('#filename-template').val();
+    const mockMetadata = {
+        title: '歌名',
+        artist: '歌手',
+        album: '专辑'
+    };
+
+    // 尝试获取当前选择的音质对应的后缀
+    const level = getCurrentLevel();
+    const ext = getAudioFormatByLevel(level);
+
+    const filename = ml_customize_filename(template, mockMetadata);
+    $('#filename-preview').text(`${filename}.${ext}`);
+}
+
+// 绑定事件监听器 (在页面加载完成后调用，或者在这里直接绑定如果 DOM 已就绪)
+// 由于此文件在 body 底部引入，可以直接绑定
+$(document).ready(function() {
+    // 监听输入框变化
+    $('#filename-template').on('input', ml_update_filename_preview);
+
+    // 监听音质变化，更新后缀
+    $('#level').on('change', ml_update_filename_preview);
+
+    // 监听变量插入按钮
+    $('.filename-variable').on('click', function() {
+        const val = $(this).data('value');
+        const $input = $('#filename-template');
+        const currentVal = $input.val();
+
+        // 在光标位置插入
+        const input = $input[0];
+        if (input.selectionStart || input.selectionStart == '0') {
+            const startPos = input.selectionStart;
+            const endPos = input.selectionEnd;
+            $input.val(currentVal.substring(0, startPos) + val + currentVal.substring(endPos, currentVal.length));
+            input.selectionStart = startPos + val.length;
+            input.selectionEnd = startPos + val.length;
+        } else {
+            $input.val(currentVal + val);
+        }
+
+        $input.focus();
+        ml_update_filename_preview();
+    });
+
+    // 监听预设按钮
+    $('.filename-preset').on('click', function() {
+        const val = $(this).data('value');
+        $('#filename-template').val(val);
+        ml_update_filename_preview();
+    });
+
+    // ---------------------------------------------------------
+    // 分隔符切换逻辑
+    // ---------------------------------------------------------
+    function updatePresetsWithSeparator() {
+        const separator = $('input[name="separator-type"]:checked').val() || '_';
+
+        // 键名映射
+        const keyMap = {
+            'title': '歌名',
+            'artist': '歌手',
+            'album': '专辑'
+        };
+
+        $('.filename-preset').each(function() {
+            const $btn = $(this);
+            const keysAttr = $btn.data('keys');
+
+            if (!keysAttr) return; // 跳过没有 keys 的 (如"仅歌名"如果没加)
+
+            const keys = keysAttr.split(',');
+
+            // 构建新的 data-value (例如 ${title}-${artist})
+            const newValue = keys.map(k => '${' + k + '}').join(separator);
+            $btn.data('value', newValue);
+
+            // 构建新的按钮文本 (例如 歌名-歌手)
+            // 如果只有一个key，不需要分隔符，也不需要改变文本（通常）
+            if (keys.length > 1) {
+                 const newText = keys.map(k => keyMap[k] || k).join(separator);
+                 $btn.text(newText);
+            }
+        });
+    }
+
+    // 监听分隔符切换
+    $('input[name="separator-type"]').on('change', updatePresetsWithSeparator);
+
+    // 初始化一次 (虽然HTML默认是 _，但为了逻辑统一)
+    updatePresetsWithSeparator();
+
+    // 初始化预览
+    ml_update_filename_preview();
+});
+
+// ---------------------------------------------------------
+
 // 定义下载函数
 async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null) {
     try {
@@ -228,6 +368,16 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
         const audioLevel = level || getCurrentLevel();
         const audioFormat = getAudioFormatByLevel(audioLevel);
         console.log(`当前音质级别: ${audioLevel}, 格式: ${audioFormat}`);
+
+        // 获取文件名模板并生成基础文件名 (不含后缀)
+        const filenameTemplate = $('#filename-template').val();
+        const metadata = {
+            title: name,
+            artist: ar_name,
+            album: al_name
+        };
+        const customFilenameBase = ml_customize_filename(filenameTemplate, metadata);
+        console.log(`生成的文件名: ${customFilenameBase}.${audioFormat}`);
 
         // 1. 获取音乐文件
         console.log("正在下载音乐文件...");
@@ -301,7 +451,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             // 写入标签
             writer.addTag();
             taggedBlob = writer.getBlob();
-            fileName = `${name}.mp3`;
+            fileName = `${customFilenameBase}.mp3`;
             console.log("ID3 标签添加完成。");
 
         } else {
@@ -340,7 +490,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
 
                 writer.addTag();
                 taggedBlob = writer.getBlob();
-                fileName = `${name}.mp3`;
+                fileName = `${customFilenameBase}.mp3`;
                 console.log("已回退到 MP3 格式处理。");
             } else {
                 // 确实是 FLAC 文件
@@ -365,7 +515,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                 // 写入标签
                 writer.addTag();
                 taggedBlob = writer.getBlob();
-                fileName = `${name}.flac`;
+                fileName = `${customFilenameBase}.flac`;
                 console.log("FLAC Vorbis 标签添加完成。");
             }
         }
