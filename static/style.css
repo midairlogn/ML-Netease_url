@@ -180,14 +180,30 @@ h1 {
     background-color: #f8f9fa;
 }
 
+/* Checkbox Styling */
+.song-checkbox {
+    width: 20px;
+    height: 20px;
+    margin-top: 0; /* Bootstrap adds margin-top to checkboxes sometimes */
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* Detail Button Styling */
 .list-group-item .select-song {
     flex-shrink: 0;
     margin-left: 15px;
     border-radius: 20px;
-    padding: 4px 12px;
+    padding: 0; /* Reset padding to control via height/width */
+    width: 60px; /* Fixed width */
+    height: 32px; /* Fixed height matching standard small buttons */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    line-height: 1;
 }
 
-/* Lyric Box */
 .lyric-box {
     max-height: 250px;
     overflow-y: auto;

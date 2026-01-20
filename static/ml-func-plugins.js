@@ -994,7 +994,7 @@ async function ml_download_single_song(song, ml_selected_level) {
     }
 }
 
-async function ml_donwload_song_list(ml_selected_level){
+async function ml_donwload_song_list(ml_selected_level, custom_song_list = null){
     // 防止重复点击
     if (ml_download_state.isDownloading) {
         console.warn('下载正在进行中，请等待完成或取消当前下载。');
@@ -1007,12 +1007,20 @@ async function ml_donwload_song_list(ml_selected_level){
         return;
     }
 
+    // Determine which list to use
+    const target_song_list = custom_song_list || ml_song_list;
+
+    if (!target_song_list || target_song_list.length === 0) {
+        ml_show_Alert('提示', '没有可下载的歌曲', 'warning');
+        return;
+    }
+
     // 初始化下载状态
     ml_download_state.isDownloading = true;
     ml_download_state.isPaused = false;
     ml_download_state.currentIndex = 0;
     ml_download_state.completedCount = 0;
-    ml_download_state.totalCount = ml_song_list.length;
+    ml_download_state.totalCount = target_song_list.length;
     ml_download_state.successCount = 0;
     ml_download_state.failedCount = 0;
     ml_download_state.failedSongs = [];
@@ -1031,9 +1039,9 @@ async function ml_donwload_song_list(ml_selected_level){
     ml_update_progress_ui();
 
     const concurrentCount = ml_get_concurrent_count();
-    console.log(`开始批量下载，共 ${ml_song_list.length} 首歌曲，并行数: ${concurrentCount}`);
+    console.log(`开始批量下载，共 ${target_song_list.length} 首歌曲，并行数: ${concurrentCount}`);
 
-    let songQueue = [...ml_song_list];
+    let songQueue = [...target_song_list];
     let attempt = 0;
 
     try {

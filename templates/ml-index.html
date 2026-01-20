@@ -96,27 +96,34 @@
         </div>
         <!-- 搜索结果列表 -->
         <div id="search-result" class="mt-4 d-none">
-            <h5>搜索结果：</h5>
-            <div class="button-container">
-                <button id="download_all_MusicButton_search" class="btn btn-primary mt-3">Download All</button>
-                <button id="play_all_search" class="btn btn-primary mt-3">Play All</button>
-                <!-- 下载控制区域 -->
-                <div class="ml-download-controls d-none mt-3">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
-                        <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
-                        <span class="ml-progress-text text-muted small">准备中...</span>
-                        <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
-                        <span class="ml-progress-eta text-muted small">计算中...</span>
-                        <span class="ml-progress-speed text-muted small ms-2"></span>
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">搜索结果</h5>
+                    <div class="button-container d-flex flex-wrap gap-2 align-items-center mb-3">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
+                        <div class="vr mx-2"></div>
+                        <button id="download_all_MusicButton_search" class="btn btn-primary btn-sm" disabled>下载选中</button>
+                        <button id="play_all_search" class="btn btn-primary btn-sm" disabled>加入播放列表</button>
                     </div>
-                    <div class="progress" style="height: 6px; border-radius: 3px;">
-                        <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                             role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    <!-- 下载控制区域 -->
+                    <div class="ml-download-controls d-none mt-3">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
+                            <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
+                            <span class="ml-progress-text text-muted small">准备中...</span>
+                            <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
+                            <span class="ml-progress-eta text-muted small">计算中...</span>
+                            <span class="ml-progress-speed text-muted small ms-2"></span>
+                        </div>
+                        <div class="progress" style="height: 6px; border-radius: 3px;">
+                            <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                                 role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
                     </div>
                 </div>
+                <ul class="list-group list-group-flush" id="search-list"></ul>
             </div>
-            <ul class="list-group" id="search-list"></ul>
         </div>
         <!-- 结果展示区域 -->
         <div id="song-info" class="alert alert-info d-none mt-4 p-0 border-0" style="box-shadow:0 2px 8px rgba(0,0,0,0.07);">
@@ -150,10 +157,14 @@
                     </div>
                     <div id="playlist-desc" class="mb-2 text-secondary small"></div>
                     <div>共 <span id="playlist-count"></span> 首歌</div>
-                    <div class="button-container">
-                        <button id="download_all_MusicButton_playlist" class="btn btn-primary mt-3">Download All</button>
-                        <button id="play_all_playlist" class="btn btn-primary mt-3">Play All</button>
-                        <!-- 下载控制区域 -->
+                    <div class="button-container d-flex flex-wrap gap-2 align-items-center mb-3 mt-3">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
+                        <div class="vr mx-2"></div>
+                        <button id="download_all_MusicButton_playlist" class="btn btn-primary btn-sm" disabled>下载选中</button>
+                        <button id="play_all_playlist" class="btn btn-primary btn-sm" disabled>加入播放列表</button>
+                    </div>
+                    <!-- 下载控制区域 -->
                         <div class="ml-download-controls d-none mt-3">
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
@@ -168,9 +179,8 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                <ul class="list-group list-group-flush" id="playlist-tracks"></ul>
             </div>
-            <ul class="list-group mt-3" id="playlist-tracks"></ul>
         </div>
         <!-- 专辑解析结果 -->
         <div id="album-result" class="mt-4 d-none">
@@ -185,10 +195,14 @@
                     </div>
                     <div id="album-desc" class="mb-2 text-secondary small"></div>
                     <div>共 <span id="album-count"></span> 首歌</div>
-                    <div class="button-container">
-                        <button id="download_all_MusicButton_album" class="btn btn-primary mt-3">Download All</button>
-                        <button id="play_all_album" class="btn btn-primary mt-3">Play All</button>
-                        <!-- 下载控制区域 -->
+                    <div class="button-container d-flex flex-wrap gap-2 align-items-center mb-3 mt-3">
+                        <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
+                        <div class="vr mx-2"></div>
+                        <button id="download_all_MusicButton_album" class="btn btn-primary btn-sm" disabled>下载选中</button>
+                        <button id="play_all_album" class="btn btn-primary btn-sm" disabled>加入播放列表</button>
+                    </div>
+                    <!-- 下载控制区域 -->
                         <div class="ml-download-controls d-none mt-3">
                             <div class="d-flex align-items-center gap-2 mb-2">
                                 <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
@@ -203,9 +217,8 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                <ul class="list-group list-group-flush" id="album-tracks"></ul>
             </div>
-            <ul class="list-group mt-3" id="album-tracks"></ul>
         </div>
     </div>
     <!-- Modal for big picture -->
@@ -524,44 +537,51 @@
 
             console.log('APlayer ML自定义监听加载完成');
 
-            // 新标签页切换逻辑
-            (function() {
+            // Tab switching logic
+            // Expose activateTab to global scope so it can be called from other event handlers
+            window.activateTab = function(selectedMode) {
                 const tabItems = document.querySelectorAll('.tab-item');
                 const modeContentAreas = document.querySelectorAll('.mode-content');
-                const resultDisplayAreas = document.querySelectorAll('#search-result, #song-info, #playlist-result, #album-result');
-                function activateTab(selectedMode) {
-                    tabItems.forEach(tab => {
-                        const mode = tab.getAttribute('data-mode');
-                        if (mode === selectedMode) {
-                            tab.classList.add('border-primary', 'text-primary', 'fw-bold');
-                            tab.classList.remove('border-transparent', 'text-secondary');
-                            tab.setAttribute('aria-current', 'page');
-                        } else {
-                            tab.classList.remove('border-primary', 'text-primary', 'fw-bold');
-                            tab.classList.add('border-transparent', 'text-secondary');
-                            tab.removeAttribute('aria-current');
-                        }
-                    });
-                    modeContentAreas.forEach(content => {
-                        if (content.id === `mode-content-${selectedMode}`) {
-                            content.classList.remove('d-none');
-                        } else {
-                            content.classList.add('d-none');
-                        }
-                    });
-                    resultDisplayAreas.forEach(area => {
-                        area.classList.add('d-none');
-                    });
-                }
+
+                // Update Tab Styles
                 tabItems.forEach(tab => {
-                    tab.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        const selectedMode = tab.getAttribute('data-mode');
-                        activateTab(selectedMode);
-                    });
+                    const mode = tab.getAttribute('data-mode');
+                    if (mode === selectedMode) {
+                        tab.classList.add('border-primary', 'text-primary', 'fw-bold');
+                        tab.classList.remove('border-transparent', 'text-secondary');
+                        tab.setAttribute('aria-current', 'page');
+                    } else {
+                        tab.classList.remove('border-primary', 'text-primary', 'fw-bold');
+                        tab.classList.add('border-transparent', 'text-secondary');
+                        tab.removeAttribute('aria-current');
+                    }
                 });
-                activateTab('search');
-            })();
+
+                // Show/Hide Input Areas
+                modeContentAreas.forEach(content => {
+                    if (content.id === `mode-content-${selectedMode}`) {
+                        content.classList.remove('d-none');
+                    } else {
+                        content.classList.add('d-none');
+                    }
+                });
+
+                // Hide ALL Result Areas when switching tabs
+                $('#search-result, #song-info, #playlist-result, #album-result').addClass('d-none');
+            };
+
+            // Bind click events to tabs
+            const tabItems = document.querySelectorAll('.tab-item');
+            tabItems.forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    const selectedMode = tab.getAttribute('data-mode');
+                    window.activateTab(selectedMode);
+                });
+            });
+
+            // Initialize default tab
+            window.activateTab('search');
 
             // 监听并行下载数输入
             $('#concurrent-downloads').on('change blur', function() {
@@ -602,23 +622,32 @@
                             $('#search-list').empty();
                             data.result.forEach(function(song) {
                                 const item = `<li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <div>
+                                    <div class="d-flex align-items-center">
+                                        <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}">
                                         <img src="${song.picUrl}" alt="cover" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:10px;">
-                                        <strong class='song-title'>${song.name}</strong> - <span>${song.artists}</span> <span class="text-muted">[${song.album}]</span>
+                                        <div>
+                                            <strong class='song-title'>${song.name}</strong> - <span>${song.artists}</span> <span class="text-muted">[${song.album}]</span>
+                                        </div>
                                     </div>
-                                    <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">解析</button>
+                                    <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">详情</button>
                                 </li>`;
                                 ml_song_list.push(song);
                                 $('#search-list').append(item);
                             });
                             $('#search-result').removeClass('d-none');
+
+                            // Initialize button state
+                            ml_update_action_buttons_state();
+
                             // 为下载按钮添加点击事件
                             $('#download_all_MusicButton_search').off('click').on('click', function() {
-                                ml_donwload_song_list($('#level').val());
+                                const selectedSongs = ml_get_selected_songs();
+                                ml_donwload_song_list($('#level').val(), selectedSongs);
                             });
                             // 为全部播放按钮添加点击事件
                             $('#play_all_search').off('click').on('click', function() {
-                                add_all_song_info_to_aplayer($('#level').val());
+                                const selectedSongs = ml_get_selected_songs();
+                                add_songs_to_aplayer(selectedSongs, $('#level').val());
                             });
                         } else {
                             $('#search-list').html('<li class="list-group-item">未找到相关歌曲</li>');
@@ -640,18 +669,20 @@
             $(document).on('click', '.select-song', function() {
                 const songId = $(this).data('id');
                 $('#song_ids').val(songId);
-                // 切换到单曲解析标签页
-                if (typeof activateTab === 'function') {
-                    activateTab('parse');
-                } else {
-                    // 兼容立即调用的情况
-                    document.querySelectorAll('.tab-item').forEach(tab => {
-                        if (tab.getAttribute('data-mode') === 'parse') {
-                            tab.click();
-                        }
-                    });
-                }
+
+                // Explicitly hide all result containers immediately to ensure clean transition
+                $('#search-result, #song-info, #playlist-result, #album-result').addClass('d-none');
+
+                // Switch to parse tab and hide existing results
+                window.activateTab('parse');
+
                 $('html,body').animate({scrollTop: $('#main-form').offset().top}, 300);
+
+                // 自动触发解析
+                // 使用 setTimeout 确保 tab 切换和动画开始后再触发，体验更好
+                setTimeout(() => {
+                    $('#parse-btn').click();
+                }, 100);
             });
 
             // 单曲解析
@@ -686,7 +717,10 @@
                         $('#song_url').attr('href', data.url).text(linkText);
                         $('#song-info').removeClass('d-none');
                         $('#show-big-pic').data('pic', data.pic);
-                        ap.list.clear();
+
+                        // Fix: Do not clear playlist, append to end if not duplicate
+                        // ap.list.clear();
+
                         ml_first_song_detailed_info = {
                             id: data.id,
                             name: data.name,
@@ -695,7 +729,19 @@
                             cover: data.pic,
                             lrc: processedLyrics
                         };
-                        ap.list.add(ml_first_song_detailed_info);
+
+                        // Check for duplicates
+                        const existingIds = ap.list.audios.map(a => a.id);
+                        // Convert to string for comparison just in case
+                        const isDuplicate = existingIds.some(id => String(id) === String(data.id));
+
+                        if (!isDuplicate) {
+                            ap.list.add(ml_first_song_detailed_info);
+                            console.log(`歌曲 ${data.name} 已添加到播放列表末尾`);
+                        } else {
+                            console.log(`歌曲 ${data.name} 已存在于播放列表，跳过添加`);
+                        }
+
                         document.querySelector('.aplayer-notice').style.opacity = '0';
                         // 为下载按钮添加点击事件
                         $('#downloadMusicButton').off('click').on('click', function() {
@@ -758,23 +804,30 @@
                         $('#playlist-tracks').empty();
                         pl.tracks.forEach(function(song, idx) {
                             const item = `<li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
+                                <div class="d-flex align-items-center">
+                                    <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}">
                                     <img src="${song.picUrl}" alt="cover" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:8px;">
                                     <strong class="playlist-title">${idx+1}. ${song.name}</strong> - <span>${song.artists}</span> <span class="text-muted">[${song.album}]</span>
                                 </div>
-                                <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">解析</button>
+                                <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">详情</button>
                             </li>`;
                             ml_song_list.push(song);
                             $('#playlist-tracks').append(item);
                         });
                         $('#playlist-result').removeClass('d-none');
+
+                        // Initialize button state
+                        ml_update_action_buttons_state();
+
                         // 为下载按钮添加点击事件
                         $('#download_all_MusicButton_playlist').off('click').on('click', function() {
-                            ml_donwload_song_list($('#level').val());
+                            const selectedSongs = ml_get_selected_songs();
+                            ml_donwload_song_list($('#level').val(), selectedSongs);
                         });
                         // 为全部播放按钮添加点击事件
                         $('#play_all_playlist').off('click').on('click', function() {
-                            add_all_song_info_to_aplayer($('#level').val());
+                            const selectedSongs = ml_get_selected_songs();
+                            add_songs_to_aplayer(selectedSongs, $('#level').val());
                         });
                     } else {
                         $('#playlist-result').removeClass('d-none');
@@ -815,23 +868,30 @@
                         $('#album-tracks').empty();
                         al.songs.forEach(function(song, idx) {
                             const item = `<li class="list-group-item d-flex justify-content-between align-items-center">
-                                <div>
+                                <div class="d-flex align-items-center">
+                                    <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}">
                                     <img src="${song.picUrl}" alt="cover" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:8px;">
                                     <strong class="playlist-title">${idx+1}. ${song.name}</strong> - <span>${song.artists}</span> <span class="text-muted">[${song.album}]</span>
                                 </div>
-                                <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">解析</button>
+                                <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">详情</button>
                             </li>`;
                             ml_song_list.push(song);
                             $('#album-tracks').append(item);
                         });
                         $('#album-result').removeClass('d-none');
+
+                        // Initialize button state
+                        ml_update_action_buttons_state();
+
                         // 为下载按钮添加点击事件
                         $('#download_all_MusicButton_album').off('click').on('click', function() {
-                            ml_donwload_song_list($('#level').val());
+                            const selectedSongs = ml_get_selected_songs();
+                            ml_donwload_song_list($('#level').val(), selectedSongs);
                         });
                         // 为全部播放按钮添加点击事件
                         $('#play_all_album').off('click').on('click', function() {
-                            add_all_song_info_to_aplayer($('#level').val());
+                            const selectedSongs = ml_get_selected_songs();
+                            add_songs_to_aplayer(selectedSongs, $('#level').val());
                         });
                     } else {
                         $('#album-result').removeClass('d-none');
@@ -851,10 +911,57 @@
                 isLoading: false
             };
 
-            async function add_all_song_info_to_aplayer(ml_selected_level){
+            // Helper: Get selected songs from the active container
+            function ml_get_selected_songs() {
+                const containerSelector = ml_get_active_result_container();
+                if (!containerSelector) return [];
+
+                const selectedIds = [];
+                $(`${containerSelector} .song-checkbox:checked`).each(function() {
+                    selectedIds.push($(this).data('id'));
+                });
+
+                // Filter ml_song_list to find matching songs
+                // Note: ID comparison should be loose (==) as data-id might be string while song.id might be int
+                return ml_song_list.filter(song => selectedIds.some(id => id == song.id));
+            }
+
+            // Helper: Toggle select all
+            window.ml_toggle_select_all = function(checked) {
+                const containerSelector = ml_get_active_result_container();
+                if (containerSelector) {
+                    $(`${containerSelector} .song-checkbox`).prop('checked', checked);
+                    ml_update_action_buttons_state();
+                }
+            };
+
+            // Helper: Update action buttons state (enable/disable based on selection)
+            function ml_update_action_buttons_state() {
+                const containerSelector = ml_get_active_result_container();
+                if (!containerSelector) return;
+
+                const hasChecked = $(`${containerSelector} .song-checkbox:checked`).length > 0;
+                const $downloadBtn = $(`${containerSelector} [id^="download_all"]`);
+                const $playBtn = $(`${containerSelector} [id^="play_all"]`);
+
+                $downloadBtn.prop('disabled', !hasChecked);
+                $playBtn.prop('disabled', !hasChecked);
+            }
+
+            // Listen for checkbox changes to update button state
+            $(document).on('change', '.song-checkbox', function() {
+                ml_update_action_buttons_state();
+            });
+
+            async function add_songs_to_aplayer(songs_to_add, ml_selected_level){
                 // 防止重复点击
                 if (ml_play_state.isLoading) {
                     console.warn('正在加载播放列表，请等待完成。');
+                    return;
+                }
+
+                if (!songs_to_add || songs_to_add.length === 0) {
+                    ml_show_Alert('提示', '请先选择要添加的歌曲', 'warning');
                     return;
                 }
 
@@ -870,11 +977,26 @@
                 ml_set_button_state(`${containerSelector} [id^="play_all"]`, true, '加载中...');
 
                 try {
-                    ap.notice('Started: dynamically adding songs', 3000, 0.8);
-                    console.log('Started: dynamically adding songs\n', ml_song_list);
+                    ap.notice('Started: adding songs to playlist', 3000, 0.8);
+                    console.log('Started: adding songs to playlist', songs_to_add);
                     ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
-                    ap.list.clear();
-                    for(const song of ml_song_list){
+
+                    // Filter out duplicates that are already in the playlist
+                    const existingIds = new Set(ap.list.audios.map(a => a.id));
+                    const newSongs = songs_to_add.filter(s => !existingIds.has(s.id));
+
+                    if (newSongs.length === 0 && songs_to_add.length > 0) {
+                        ap.notice('All selected songs are already in the playlist', 3000, 0.8);
+                        console.log('All selected songs are already in the playlist');
+                        return;
+                    }
+
+                    // If playlist is empty, clear it just in case (though logic above handles it)
+                    // Actually, we want to append.
+
+                    let addedCount = 0;
+
+                    for(const song of newSongs){
                         let currentTry = 0;
                         let songAdded = false;
                         let response = null;
@@ -900,7 +1022,7 @@
                                 processedLyrics = lrctran(response.lyric, response.tlyric);
                             }
                             ml_song_detailed = {
-                                id: song.id,
+                                id: song.id, // Ensure ID is stored for duplicate checking
                                 name: response.name,
                                 artist: response.ar_name,
                                 url: response.url,
@@ -908,19 +1030,26 @@
                                 lrc: processedLyrics
                             };
                             ap.list.add(ml_song_detailed);
+                            addedCount++;
                             console.log(`歌曲 ${song.name} 已成功添加到播放列表。`);
                         } else {
                             console.warn(`歌曲 ${song.name} 达到最大重试次数 (${ml_max_try_times + 1} 次) 仍未成功，已跳过。`);
                         }
                     }
                     console.log(ap.list);
-                    ap.notice('Finished: dynamically adding songs', 3000, 0.8);
-                    console.log('Finished: dynamically adding songs');
+                    ap.notice(`Finished: added ${addedCount} songs`, 3000, 0.8);
+                    console.log(`Finished: added ${addedCount} songs`);
                 } finally {
                     // 恢复按钮状态
                     ml_play_state.isLoading = false;
                     ml_set_button_state(`${containerSelector} [id^="play_all"]`, false);
                 }
+            }
+
+            async function add_all_song_info_to_aplayer(ml_selected_level){
+                // This function is kept for backward compatibility if needed,
+                // but we will mainly use add_songs_to_aplayer
+                await add_songs_to_aplayer(ml_song_list, ml_selected_level);
             }
             // 可选：sleep 辅助函数
             // async function sleep(ms) {
