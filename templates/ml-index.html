@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/aplayer/1.10.1/APlayer.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <div class="container mt-5">
+<body class="d-flex flex-column min-vh-100">
+    <div class="container mt-5 flex-grow-1">
         <h1 class="text-center mb-4">ML Netease Toolkit</h1>
         <div class="card shadow-sm">
             <div class="card-body">
@@ -39,10 +39,6 @@
                             <div class="mb-3">
                                 <label for="search_keywords" class="form-label">搜索关键词</label>
                                 <input type="text" id="search_keywords" class="form-control" placeholder="输入关键词进行搜索">
-                            </div>
-                            <div class="mb-3">
-                                <label for="search_limit" class="form-label">返回数量</label>
-                                <input type="number" id="search_limit" class="form-control" value="10" min="1" max="50">
                             </div>
                             <div class="text-center">
                                 <button type="button" id="search-btn" class="btn btn-success w-50">搜索</button>
@@ -256,7 +252,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <div class="row mb-3">
-                            <div class="col-md-9">
+                            <div class="col-md-6">
                                 <label for="level" class="form-label">音质选择</label>
                                 <select id="level" class="form-select">
                                     <option value="standard">标准音质</option>
@@ -267,6 +263,10 @@
                                     <option value="jyeffect">高清环绕声</option>
                                     <option value="jymaster">超清母带</option>
                                 </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label for="search_limit" class="form-label">搜索返回数量</label>
+                                <input type="number" id="search_limit" class="form-control" value="10" min="3" max="100">
                             </div>
                             <div class="col-md-3">
                                 <label for="concurrent-downloads" class="form-label">最大同时下载数</label>
@@ -596,6 +596,19 @@
                 $(this).val(val);
             });
 
+            // 监听搜索返回数量输入
+            $('#search_limit').on('change blur', function() {
+                let val = parseInt($(this).val());
+                const min = parseInt($(this).attr('min'));
+                const max = parseInt($(this).attr('max'));
+                if (isNaN(val) || val < min) {
+                    val = min;
+                } else if (val > max) {
+                    val = max;
+                }
+                $(this).val(val);
+            });
+
             // 搜索功能
             $('#search-btn').on('click', function() {
                 const $btn = $(this);
@@ -623,7 +636,7 @@
                             data.result.forEach(function(song) {
                                 const item = `<li class="list-group-item d-flex justify-content-between align-items-center">
                                     <div class="d-flex align-items-center">
-                                        <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}">
+                                        <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}" checked>
                                         <img src="${song.picUrl}" alt="cover" style="width:40px;height:40px;object-fit:cover;border-radius:4px;margin-right:10px;">
                                         <div>
                                             <strong class='song-title'>${song.name}</strong> - <span>${song.artists}</span> <span class="text-muted">[${song.album}]</span>
@@ -805,7 +818,7 @@
                         pl.tracks.forEach(function(song, idx) {
                             const item = `<li class="list-group-item d-flex justify-content-between align-items-center">
                                 <div class="d-flex align-items-center">
-                                    <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}">
+                                    <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}" checked>
                                     <img src="${song.picUrl}" alt="cover" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:8px;">
                                     <strong class="playlist-title">${idx+1}. ${song.name}</strong> - <span>${song.artists}</span> <span class="text-muted">[${song.album}]</span>
                                 </div>
@@ -869,7 +882,7 @@
                         al.songs.forEach(function(song, idx) {
                             const item = `<li class="list-group-item d-flex justify-content-between align-items-center">
                                 <div class="d-flex align-items-center">
-                                    <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}">
+                                    <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}" checked>
                                     <img src="${song.picUrl}" alt="cover" style="width:32px;height:32px;object-fit:cover;border-radius:4px;margin-right:8px;">
                                     <strong class="playlist-title">${idx+1}. ${song.name}</strong> - <span>${song.artists}</span> <span class="text-muted">[${song.album}]</span>
                                 </div>
@@ -1063,6 +1076,7 @@
             const DEFAULT_FILENAME_TEMPLATE = "${title}_${artist}_${album}";
             const DEFAULT_AUDIO_LEVEL = "standard";
             const DEFAULT_CONCURRENT = "3";
+            const DEFAULT_SEARCH_LIMIT = "10";
             const DEFAULT_SEPARATOR = "_";
 
             // 1. Load settings on startup
@@ -1082,6 +1096,14 @@
                 localStorage.setItem('ml_concurrent_downloads', savedConcurrent);
             }
             $('#concurrent-downloads').val(savedConcurrent);
+
+            // Search Limit
+            let savedSearchLimit = localStorage.getItem('ml_search_limit');
+            if (savedSearchLimit === null) {
+                savedSearchLimit = DEFAULT_SEARCH_LIMIT;
+                localStorage.setItem('ml_search_limit', savedSearchLimit);
+            }
+            $('#search_limit').val(savedSearchLimit);
 
             // Filename Template
             let savedFilenameTemplate = localStorage.getItem('ml_filename_template');
@@ -1121,6 +1143,12 @@
                 let val = $(this).val();
                 if (!val) val = DEFAULT_CONCURRENT; // Use default if empty
                 localStorage.setItem('ml_concurrent_downloads', val);
+            });
+
+            $('#search_limit').on('change', function() {
+                let val = $(this).val();
+                if (!val) val = DEFAULT_SEARCH_LIMIT; // Use default if empty
+                localStorage.setItem('ml_search_limit', val);
             });
 
             $('#filename-template').on('input', function() {

@@ -417,17 +417,18 @@ h1 {
 .footer {
     background-color: #fff !important;
     border-top: 1px solid #eaeaea !important;
-    margin-top: 60px !important;
+    margin-top: auto !important; /* Changed from 60px to auto to work better with flex sticky footer if needed, or keep as margin */
 }
 
 .footer a {
-    color: #6c757d;
-    text-decoration: none;
+    color: #0d6efd; /* Prominent Blue */
+    text-decoration: underline;
     transition: color 0.2s;
+    font-weight: 600;
 }
 
 .footer a:hover {
-    color: #007bff;
+    color: #0a58ca; /* Darker Blue on Hover */
 }
 
 /* Badge Tweaks */
