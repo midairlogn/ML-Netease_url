@@ -306,19 +306,20 @@ $(document).ready(function() {
         }
 
         $input.focus();
+        $input.trigger('input'); // 触发input事件以保存设置
         ml_update_filename_preview();
     });
 
     // 监听预设按钮
     $('.filename-preset').on('click', function() {
         const val = $(this).data('value');
-        $('#filename-template').val(val);
+        $('#filename-template').val(val).trigger('input'); // 触发input事件以保存设置
         ml_update_filename_preview();
     });
 
     // 监听清空按钮
     $('#clear-filename-template').on('click', function() {
-        $('#filename-template').val('').focus();
+        $('#filename-template').val('').focus().trigger('input'); // 触发input事件以保存设置
         ml_update_filename_preview();
     });
 
