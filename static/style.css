@@ -98,6 +98,34 @@ h1 {
     box-shadow: 0 4px 8px rgba(255,193,7,0.3);
 }
 
+/* Button Cooldown State */
+.btn-cooldown {
+    opacity: 0.6 !important;
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+    position: relative;
+}
+
+.btn-cooldown::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background: rgba(255, 255, 255, 0.3);
+    animation: cooldown-progress 1.5s linear forwards;
+    border-radius: inherit;
+}
+
+@keyframes cooldown-progress {
+    from {
+        width: 100%;
+    }
+    to {
+        width: 0%;
+    }
+}
+
 /* Navigation Tabs */
 .nav-link {
     color: #6c757d;
@@ -284,7 +312,7 @@ h1 {
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(2px);
-    z-index: 1040;
+    z-index: 1070;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.3s ease, visibility 0.3s ease;
@@ -306,7 +334,7 @@ h1 {
     background-color: white;
     border-radius: 12px;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
-    z-index: 1050;
+    z-index: 1080;
     overflow: hidden;
     opacity: 0;
     visibility: hidden;
@@ -483,3 +511,471 @@ input[name="separator-type"] + label:hover {
 /* Rotate icon when collapsed (default is up if 180deg, depends on logic, here we set logic in js) */
 /* Actually, simpler to handle rotation in CSS if possible, but JS is fine. */
 /* Just ensuring smooth transition */
+
+/* ===== Task Manager Styles ===== */
+
+/* Task Manager Toggle Button */
+#task-manager-toggle {
+    transition: all 0.3s ease;
+}
+
+#task-manager-toggle:hover {
+    transform: scale(1.05);
+    box-shadow: 0 6px 20px rgba(0, 123, 255, 0.4) !important;
+}
+
+/* Task Manager Panel */
+#task-manager-panel {
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+#task-manager-panel.show {
+    display: block !important;
+    animation: slideInLeft 0.3s ease forwards;
+}
+
+@keyframes slideInLeft {
+    from {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes slideOutLeft {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+}
+
+/* Task Section */
+.task-section {
+    background: #fff;
+}
+
+.task-section:hover {
+    background: #fafbfc;
+}
+
+/* Task List */
+.task-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Task Item */
+.task-item {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+}
+
+.task-item:hover {
+    border-color: #dee2e6;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.task-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Task Header */
+.task-item-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+}
+
+.task-item-cover {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.task-item-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.task-item-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.task-item-subtitle {
+    font-size: 0.8rem;
+    color: #6c757d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Task Progress */
+.task-item-progress {
+    margin-bottom: 8px;
+}
+
+.task-item-progress .progress {
+    height: 6px;
+    border-radius: 3px;
+    background-color: #e9ecef;
+}
+
+.task-item-progress .progress-bar {
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.task-item-stats {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 4px;
+}
+
+/* Task Actions */
+.task-item-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.task-item-actions .btn {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border-radius: 15px;
+}
+
+/* Task Status Badges */
+.task-status-badge {
+    font-size: 0.7rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
+/* Completed Task Style */
+.task-item.completed {
+    opacity: 0.8;
+    background: #f0f9f0;
+    border-color: #c3e6cb;
+}
+
+.task-item.completed .task-item-progress .progress-bar {
+    background-color: #28a745 !important;
+}
+
+/* Paused Task Style */
+.task-item.paused {
+    background: #fff9e6;
+    border-color: #ffeeba;
+}
+
+.task-item.paused .task-item-progress .progress-bar {
+    background-color: #ffc107 !important;
+    animation: none;
+}
+
+/* Waiting Task Style */
+.task-item.waiting {
+    background: #f8f9fa;
+    border-color: #dee2e6;
+}
+
+/* Failed Task Style */
+.task-item.failed {
+    background: #fef0f0;
+    border-color: #f5c6cb;
+}
+
+/* Task Manager Overlay */
+#task-manager-overlay {
+    transition: opacity 0.3s ease;
+}
+
+#task-manager-overlay.show {
+    display: block !important;
+    opacity: 1;
+}
+
+/* Scrollbar Styling for Task List */
+.task-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.task-list::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.task-list::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+}
+
+.task-list::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Responsive adjustments for task manager */
+@media (max-width: 400px) {
+    #task-manager-panel {
+        width: 100% !important;
+    }
+}
+
+/* ===== Task Item Button Improvements ===== */
+
+/* 统一的任务操作按钮样式 */
+.task-item-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-start;
+}
+
+.task-item-actions .btn {
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    border-radius: 15px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 60px;
+}
+
+/* 状态标签样式优化 */
+.task-status-badge {
+    font-size: 0.75rem;
+    padding: 5px 12px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+}
+
+.task-status-badge svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+}
+
+/* 删除按钮样式 */
+.task-remove-btn {
+    padding: 4px 8px !important;
+    min-width: auto !important;
+    border-radius: 6px !important;
+    border-color: #dee2e6 !important;
+    transition: all 0.2s ease !important;
+}
+
+.task-remove-btn:hover {
+    background-color: #f8d7da !important;
+    border-color: #f5c6cb !important;
+    color: #721c24 !important;
+}
+
+/* 完成状态样式 */
+.task-item.completed .task-item-actions .task-status-badge {
+    background-color: #28a745;
+}
+
+/* ===== Toast Notification Styles ===== */
+
+/* Toast容器 - 右下角定位 */
+#ml-toast-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1100;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 10px;
+    max-height: calc(100vh - 40px);
+    overflow: hidden;
+    pointer-events: none;
+}
+
+/* Toast项目 */
+.ml-toast {
+    width: 320px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: auto;
+}
+
+.ml-toast.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.ml-toast.collapsed {
+    opacity: 0.6;
+    transform: scale(0.9) translateY(10px);
+    max-height: 30px;
+    overflow: hidden;
+}
+
+/* Toast头部 */
+.ml-toast-header {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.ml-toast-type-icon {
+    display: flex;
+    align-items: center;
+    margin-right: 6px;
+}
+
+.ml-toast-type-text {
+    flex: 1;
+}
+
+.ml-toast-close {
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+    transition: opacity 0.2s;
+}
+
+.ml-toast-close:hover {
+    opacity: 1;
+}
+
+/* Toast类型样式 */
+.ml-toast.toast-added .ml-toast-header {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-started .ml-toast-header {
+    background: linear-gradient(135deg, #17a2b8 0%, #117a8b 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-completed .ml-toast-header {
+    background: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-search .ml-toast-header {
+    background: linear-gradient(135deg, #6f42c1 0%, #5a32a3 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-parse .ml-toast-header {
+    background: linear-gradient(135deg, #fd7e14 0%, #dc6a00 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-playlist .ml-toast-header {
+    background: linear-gradient(135deg, #e83e8c 0%, #c21c6b 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-album .ml-toast-header {
+    background: linear-gradient(135deg, #20c997 0%, #17a085 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-info .ml-toast-header {
+    background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+    color: #fff;
+}
+
+/* Toast内容 */
+.ml-toast-body {
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    gap: 12px;
+}
+
+.ml-toast-cover {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.ml-toast-cover-placeholder {
+    background: #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #adb5bd;
+}
+
+.ml-toast-info {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.ml-toast-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.ml-toast-subtitle {
+    font-size: 0.8rem;
+    color: #6c757d;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 响应式Toast */
+@media (max-width: 400px) {
+    #ml-toast-container {
+        right: 10px;
+        left: 10px;
+        bottom: 10px;
+    }
+
+    .ml-toast {
+        width: 100%;
+    }
+}

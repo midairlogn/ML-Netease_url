@@ -10,6 +10,66 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body class="d-flex flex-column min-vh-100">
+    <!-- Task Manager Toggle Button -->
+    <button type="button" id="task-manager-toggle" class="btn btn-primary position-fixed shadow d-flex align-items-center justify-content-center"
+            style="top: 15px; left: 15px; width: 50px; height: 50px; z-index: 1060; border-radius: 12px;"
+            title="下载任务">
+        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" fill="currentColor" class="bi bi-download" viewBox="0 0 16 16">
+            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+            <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+        </svg>
+        <span id="task-manager-badge" class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">0</span>
+    </button>
+
+    <!-- Task Manager Panel -->
+    <div id="task-manager-panel" class="position-fixed d-none" style="top: 0; left: 0; width: 360px; height: 100vh; z-index: 1055; background: #fff; box-shadow: 4px 0 20px rgba(0,0,0,0.15); overflow-y: auto;">
+        <div class="task-manager-header d-flex justify-content-between align-items-center p-3 border-bottom" style="background: linear-gradient(135deg, #007bff 0%, #0056b3 100%); color: #fff;">
+            <h5 class="mb-0 fw-bold">下载任务</h5>
+            <button type="button" id="task-manager-close" class="btn-close btn-close-white" aria-label="Close"></button>
+        </div>
+
+        <!-- Active Tasks Section -->
+        <div class="task-section p-3 border-bottom">
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-primary me-2">进行中</span>
+                <span class="task-count text-muted small" id="active-task-count">0</span>
+            </div>
+            <div id="active-tasks" class="task-list"></div>
+            <div id="active-tasks-empty" class="text-muted small text-center py-3">暂无进行中的任务</div>
+        </div>
+
+        <!-- Waiting/Paused Tasks Section -->
+        <div class="task-section p-3 border-bottom">
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-warning text-dark me-2">等待中</span>
+                <span class="task-count text-muted small" id="waiting-task-count">0</span>
+            </div>
+            <div id="waiting-tasks" class="task-list"></div>
+            <div id="waiting-tasks-empty" class="text-muted small text-center py-3">暂无等待中的任务</div>
+        </div>
+
+        <!-- Completed Tasks Section -->
+        <div class="task-section p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div>
+                    <span class="badge bg-success me-2">已完成</span>
+                    <span class="task-count text-muted small" id="completed-task-count">0</span>
+                </div>
+                <button type="button" id="clear-completed-tasks" class="btn btn-outline-secondary btn-sm" title="清空已完成">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                    </svg>
+                </button>
+            </div>
+            <div id="completed-tasks" class="task-list"></div>
+            <div id="completed-tasks-empty" class="text-muted small text-center py-3">暂无已完成的任务</div>
+        </div>
+    </div>
+
+    <!-- Task Manager Overlay -->
+    <div id="task-manager-overlay" class="position-fixed d-none" style="top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 1054;"></div>
+
     <div class="container mt-5 flex-grow-1">
         <h1 class="text-center mb-4">ML Netease Toolkit</h1>
         <div class="card shadow-sm">
@@ -99,23 +159,8 @@
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
                         <div class="vr mx-2"></div>
-                        <button id="download_all_MusicButton_search" class="btn btn-primary btn-sm" disabled>下载选中</button>
+                        <button id="download_all_MusicButton_search" class="btn btn-primary btn-sm">下载选中</button>
                         <button id="play_all_search" class="btn btn-primary btn-sm" disabled>加入播放列表</button>
-                    </div>
-                    <!-- 下载控制区域 -->
-                    <div class="ml-download-controls d-none mt-3">
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
-                            <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
-                            <span class="ml-progress-text text-muted small">准备中...</span>
-                            <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
-                            <span class="ml-progress-eta text-muted small">计算中...</span>
-                            <span class="ml-progress-speed text-muted small ms-2"></span>
-                        </div>
-                        <div class="progress" style="height: 6px; border-radius: 3px;">
-                            <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                                 role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
                     </div>
                 </div>
                 <ul class="list-group list-group-flush" id="search-list"></ul>
@@ -126,7 +171,7 @@
             <div class="row g-0 align-items-stretch">
                 <div class="col-md-8 p-3 d-flex flex-column justify-content-between">
                     <h4 class="mb-2" id="song_name" style="font-weight:700;"></h4>
-                    <button id="downloadMusicButton" class="btn btn-primary mt-3">Download (with ID3 tag)</button>
+                    <button id="downloadMusicButton" class="btn btn-primary mt-3">下载(并写入元数据)</button>
                     <div class="mb-2"><span class="badge bg-primary me-2">歌手</span><span id="artist_names"></span></div>
                     <div class="mb-2"><span class="badge bg-secondary me-2">专辑</span><span id="song_alname"></span></div>
                     <div class="mb-2"><span class="badge bg-success me-2">音质</span><span id="song_level"></span></div>
@@ -157,23 +202,9 @@
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
                         <div class="vr mx-2"></div>
-                        <button id="download_all_MusicButton_playlist" class="btn btn-primary btn-sm" disabled>下载选中</button>
+                        <button id="download_all_MusicButton_playlist" class="btn btn-primary btn-sm">下载选中</button>
                         <button id="play_all_playlist" class="btn btn-primary btn-sm" disabled>加入播放列表</button>
                     </div>
-                    <!-- 下载控制区域 -->
-                        <div class="ml-download-controls d-none mt-3">
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
-                                <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
-                                <span class="ml-progress-text text-muted small">准备中...</span>
-                                <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
-                                <span class="ml-progress-eta text-muted small">计算中...</span>
-                            </div>
-                            <div class="progress" style="height: 6px; border-radius: 3px;">
-                                <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                                     role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                            </div>
-                        </div>
                     </div>
                 <ul class="list-group list-group-flush" id="playlist-tracks"></ul>
             </div>
@@ -195,23 +226,9 @@
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
                         <div class="vr mx-2"></div>
-                        <button id="download_all_MusicButton_album" class="btn btn-primary btn-sm" disabled>下载选中</button>
+                        <button id="download_all_MusicButton_album" class="btn btn-primary btn-sm">下载选中</button>
                         <button id="play_all_album" class="btn btn-primary btn-sm" disabled>加入播放列表</button>
                     </div>
-                    <!-- 下载控制区域 -->
-                        <div class="ml-download-controls d-none mt-3">
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <button class="btn btn-warning btn-sm ml-pause-btn">暂停下载</button>
-                                <button class="btn btn-outline-danger btn-sm ml-cancel-btn">取消下载</button>
-                                <span class="ml-progress-text text-muted small">准备中...</span>
-                                <span class="ml-progress-percent fw-bold ms-auto">0.0%</span>
-                                <span class="ml-progress-eta text-muted small">计算中...</span>
-                            </div>
-                            <div class="progress" style="height: 6px; border-radius: 3px;">
-                                <div class="progress-bar ml-progress-bar progress-bar-striped progress-bar-animated bg-primary"
-                                     role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                            </div>
-                        </div>
                     </div>
                 <ul class="list-group list-group-flush" id="album-tracks"></ul>
             </div>
@@ -272,6 +289,12 @@
                                 <label for="concurrent-downloads" class="form-label">最大同时下载数</label>
                                 <input type="number" id="concurrent-downloads" class="form-control" value="3" min="1" max="10">
                             </div>
+                            <!-- 最大任务数设置已注释
+                            <div class="col-md-3">
+                                <label for="max-download-tasks" class="form-label small">最大任务数</label>
+                                <input type="number" id="max-download-tasks" class="form-control form-control-sm" value="3" min="1" max="10">
+                            </div>
+                            -->
                         </div>
 
                         <!-- 自定义文件名格式区域 -->
@@ -397,6 +420,7 @@
     <!-- 引入 ml 下载函数 (./ml-js-plugins/ml-func-plugins.js) -->
     <script src="{{ url_for('static', filename='ml-flac-writer.js') }}"></script>
     <script src="{{ url_for('static', filename='ml-func-plugins.js') }}"></script>
+    <script src="{{ url_for('static', filename='ml-task-manager.js') }}"></script>
 
     <!-- 自定义弹窗函数 -->
     <script>
@@ -649,13 +673,21 @@
                             });
                             $('#search-result').removeClass('d-none');
 
+                            // 显示搜索成功通知
+                            ml_show_search_success_toast(data.result.length);
+
                             // Initialize button state
                             ml_update_action_buttons_state();
 
                             // 为下载按钮添加点击事件
                             $('#download_all_MusicButton_search').off('click').on('click', function() {
+                                ml_apply_download_cooldown(this);
                                 const selectedSongs = ml_get_selected_songs();
-                                ml_donwload_song_list($('#level').val(), selectedSongs);
+                                if (selectedSongs.length === 0) {
+                                    ml_show_Alert('提示', '请先选择要下载的歌曲', 'warning');
+                                    return;
+                                }
+                                ml_add_batch_task(selectedSongs, '搜索结果', `${selectedSongs.length} 首歌曲`, selectedSongs[0]?.picUrl || '', $('#level').val());
                             });
                             // 为全部播放按钮添加点击事件
                             $('#play_all_search').off('click').on('click', function() {
@@ -731,6 +763,9 @@
                         $('#song-info').removeClass('d-none');
                         $('#show-big-pic').data('pic', data.pic);
 
+                        // 显示单曲解析成功通知
+                        ml_show_parse_success_toast(data.name, data.ar_name, data.pic);
+
                         // Fix: Do not clear playlist, append to end if not duplicate
                         // ap.list.clear();
 
@@ -758,18 +793,17 @@
                         document.querySelector('.aplayer-notice').style.opacity = '0';
                         // 为下载按钮添加点击事件
                         $('#downloadMusicButton').off('click').on('click', function() {
-                            ml_set_button_state('#downloadMusicButton', true, '下载中...');
-                            ml_music_download(
-                                data.al_name,
-                                data.ar_name,
-                                processedLyrics,
-                                data.name,
-                                data.pic,
-                                data.url,
-                                level
-                            ).finally(() => {
-                                ml_set_button_state('#downloadMusicButton', false);
-                            });
+                            ml_apply_download_cooldown(this);
+                            const songData = {
+                                id: data.id,
+                                name: data.name,
+                                ar_name: data.ar_name,
+                                al_name: data.al_name,
+                                pic: data.pic,
+                                picUrl: data.pic,
+                                artists: data.ar_name
+                            };
+                            ml_add_single_song_task(songData, level);
                         });
                     } else {
                         ml_show_Alert('解析失败', data.msg, 'error');
@@ -829,13 +863,24 @@
                         });
                         $('#playlist-result').removeClass('d-none');
 
+                        // 显示歌单解析成功通知
+                        ml_show_playlist_success_toast(pl.name, pl.trackCount, pl.coverImgUrl);
+
                         // Initialize button state
                         ml_update_action_buttons_state();
 
                         // 为下载按钮添加点击事件
                         $('#download_all_MusicButton_playlist').off('click').on('click', function() {
+                            ml_apply_download_cooldown(this);
                             const selectedSongs = ml_get_selected_songs();
-                            ml_donwload_song_list($('#level').val(), selectedSongs);
+                            if (selectedSongs.length === 0) {
+                                ml_show_Alert('提示', '请先选择要下载的歌曲', 'warning');
+                                return;
+                            }
+                            const playlistName = $('#playlist-name').text();
+                            const playlistDesc = $('#playlist-desc').text();
+                            const playlistCover = $('#playlist-cover').attr('src');
+                            ml_add_batch_task(selectedSongs, playlistName, playlistDesc || `${selectedSongs.length} 首歌曲`, playlistCover, $('#level').val());
                         });
                         // 为全部播放按钮添加点击事件
                         $('#play_all_playlist').off('click').on('click', function() {
@@ -893,13 +938,24 @@
                         });
                         $('#album-result').removeClass('d-none');
 
+                        // 显示专辑解析成功通知
+                        ml_show_album_success_toast(al.name, al.artist, al.songs.length, al.coverImgUrl);
+
                         // Initialize button state
                         ml_update_action_buttons_state();
 
                         // 为下载按钮添加点击事件
                         $('#download_all_MusicButton_album').off('click').on('click', function() {
+                            ml_apply_download_cooldown(this);
                             const selectedSongs = ml_get_selected_songs();
-                            ml_donwload_song_list($('#level').val(), selectedSongs);
+                            if (selectedSongs.length === 0) {
+                                ml_show_Alert('提示', '请先选择要下载的歌曲', 'warning');
+                                return;
+                            }
+                            const albumName = $('#album-name').text();
+                            const albumDesc = $('#album-desc').text();
+                            const albumCover = $('#album-cover').attr('src');
+                            ml_add_batch_task(selectedSongs, albumName, albumDesc || `${selectedSongs.length} 首歌曲`, albumCover, $('#level').val());
                         });
                         // 为全部播放按钮添加点击事件
                         $('#play_all_album').off('click').on('click', function() {
