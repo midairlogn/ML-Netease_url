@@ -12,10 +12,17 @@
 - [x] 优美的WebUI界面
 - [x] 快速部署，支持多平台
 - [x] 网页内存占用小(一般小于150MB)
-- [x] 控制台详细输出，便于开发、调试
 - [x] 支持批量下载、自定义下载的文件名格式
+- [x] 优雅的下载管理器、设置和通知界面
+- [x] 控制台详细输出，便于开发、调试
 
-![Screenshot](Screenshots/Screenshot1.png)
+<table>
+  <tr>
+    <td><img src="Screenshots/Screenshot1.png" height="200" alt="Screenshot1"></td>
+    <td><img src="Screenshots/Screenshot2.png" height="200" alt="Screenshot2"></td>
+    <td><img src="Screenshots/Screenshot3.png" height="200" alt="Screenshot3"></td>
+  </tr>
+</table>
 
 ## 快速开始
 
