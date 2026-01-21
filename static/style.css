@@ -919,6 +919,21 @@ input[name="separator-type"] + label:hover {
     color: #fff;
 }
 
+.ml-toast.toast-paused .ml-toast-header {
+    background: linear-gradient(135deg, #ffc107 0%, #d39e00 100%);
+    color: #212529;
+}
+
+.ml-toast.toast-resumed .ml-toast-header {
+    background: linear-gradient(135deg, #17a2b8 0%, #117a8b 100%);
+    color: #fff;
+}
+
+.ml-toast.toast-cancelled .ml-toast-header {
+    background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%);
+    color: #fff;
+}
+
 /* Toast内容 */
 .ml-toast-body {
     display: flex;

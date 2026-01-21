@@ -392,6 +392,9 @@ function ml_pause_task(taskId) {
     task.isPaused = true;
     task.pauseStartTime = Date.now();
     ml_update_task_panel();
+
+    // 显示暂停通知
+    ml_show_task_paused_toast(task);
 }
 
 /**
@@ -416,6 +419,9 @@ function ml_resume_task(taskId) {
     }
 
     ml_update_task_panel();
+
+    // 显示继续通知
+    ml_show_task_resumed_toast(task);
 }
 
 /**
@@ -437,6 +443,9 @@ async function ml_cancel_task(taskId) {
 
     ml_update_task_panel();
     ml_update_task_badge();
+
+    // 显示取消通知
+    ml_show_task_cancelled_toast(task);
 
     // Process next task
     setTimeout(() => ml_process_task_queue(), 100);
@@ -885,6 +894,28 @@ function ml_create_toast_html(toast) {
             </svg>`;
             typeText = '专辑解析成功';
             break;
+        case 'paused':
+            typeClass = 'toast-paused';
+            typeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM6.25 5C5.56 5 5 5.56 5 6.25v3.5a1.25 1.25 0 1 0 2.5 0v-3.5C7.5 5.56 6.94 5 6.25 5zm3.5 0c-.69 0-1.25.56-1.25 1.25v3.5a1.25 1.25 0 1 0 2.5 0v-3.5C11 5.56 10.44 5 9.75 5z"/>
+            </svg>`;
+            typeText = '已暂停';
+            break;
+        case 'resumed':
+            typeClass = 'toast-resumed';
+            typeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                <path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/>
+            </svg>`;
+            typeText = '已继续';
+            break;
+        case 'cancelled':
+            typeClass = 'toast-cancelled';
+            typeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zM5.354 4.646a.5.5 0 1 0-.708.708L7.293 8l-2.647 2.646a.5.5 0 0 0 .708.708L8 8.707l2.646 2.647a.5.5 0 0 0 .708-.708L8.707 8l2.647-2.646a.5.5 0 0 0-.708-.708L8 7.293 5.354 4.646z"/>
+            </svg>`;
+            typeText = '已取消';
+            break;
         default:
             typeClass = 'toast-info';
             typeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -1008,6 +1039,75 @@ function ml_show_album_success_toast(albumName, artist, count, cover) {
         cover: cover
     });
 }
+
+/**
+ * 显示任务暂停通知
+ */
+function ml_show_task_paused_toast(task) {
+    ml_show_toast({
+        type: 'paused',
+        title: task.title,
+        subtitle: task.type === ML_TASK_TYPE.BATCH ?
+            `已暂停 (${task.completedCount}/${task.totalCount})` :
+            '下载已暂停',
+        cover: task.cover
+    });
+}
+
+/**
+ * 显示任务继续通知
+ */
+function ml_show_task_resumed_toast(task) {
+    ml_show_toast({
+        type: 'resumed',
+        title: task.title,
+        subtitle: task.type === ML_TASK_TYPE.BATCH ?
+            `继续下载 (${task.completedCount}/${task.totalCount})` :
+            '下载已继续',
+        cover: task.cover
+    });
+}
+
+/**
+ * 显示任务取消通知
+ */
+function ml_show_task_cancelled_toast(task) {
+    ml_show_toast({
+        type: 'cancelled',
+        title: task.title,
+        subtitle: task.type === ML_TASK_TYPE.BATCH ?
+            `已取消 (${task.successCount}/${task.totalCount} 已完成)` :
+            '下载已取消',
+        cover: task.cover
+    });
+}
+
+// ===== Page Unload Warning =====
+
+/**
+ * Check if there are incomplete tasks (active, waiting, or paused)
+ * @returns {boolean} - True if there are incomplete tasks
+ */
+function ml_has_incomplete_tasks() {
+    return ml_task_manager.tasks.some(t =>
+        t.status === ML_TASK_STATUS.ACTIVE ||
+        t.status === ML_TASK_STATUS.WAITING ||
+        t.status === ML_TASK_STATUS.PAUSED
+    );
+}
+
+/**
+ * Handle beforeunload event to warn user about incomplete tasks
+ */
+window.addEventListener('beforeunload', function(e) {
+    if (ml_has_incomplete_tasks()) {
+        // Standard way to trigger browser's confirmation dialog
+        e.preventDefault();
+        // For older browsers, return a string (modern browsers ignore the custom message)
+        e.returnValue = '您有未完成的下载任务，确定要离开吗？';
+        return e.returnValue;
+    }
+});
 
 // ===== Initialize =====
 
