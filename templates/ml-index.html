@@ -218,10 +218,20 @@
                         <div>
                             <h5 id="album-name" class="mb-1"></h5>
                             <div class="text-muted" id="album-artist"></div>
+                            <div class="text-muted small" id="album-publish-time"></div>
                         </div>
                     </div>
-                    <div id="album-desc" class="mb-2 text-secondary small"></div>
-                    <div>共 <span id="album-count"></span> 首歌</div>
+                    <div id="album-desc-container" class="mb-2 text-secondary small">
+                        <div id="album-desc" style="white-space: pre-line;"></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="text-secondary small">共 <span id="album-count"></span> 首歌</div>
+                        <button id="album-desc-toggle" class="btn btn-link btn-sm p-0 text-decoration-none d-none" title="展开/收起">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-down transition-transform" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="button-container d-flex flex-wrap gap-2 align-items-center mb-3 mt-3">
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
@@ -607,6 +617,16 @@
             // Initialize default tab
             window.activateTab('search');
 
+            // 格式化日期
+            function formatDate(timestamp) {
+                if (!timestamp) return '';
+                const date = new Date(timestamp);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
             // 监听并行下载数输入
             $('#concurrent-downloads').on('change blur', function() {
                 let val = parseInt($(this).val());
@@ -921,7 +941,35 @@
                         $('#album-cover').attr('src', al.coverImgUrl);
                         $('#album-name').text(al.name);
                         $('#album-artist').text(al.artist);
-                        $('#album-desc').text(al.description || '');
+                        $('#album-publish-time').text(al.publishTime ? '发行时间：' + formatDate(al.publishTime) : '');
+
+                        const $desc = $('#album-desc');
+                        const $toggle = $('#album-desc-toggle');
+                        const fullDesc = al.description || '';
+                        $desc.text(fullDesc);
+
+                        // 处理折叠逻辑
+                        if (fullDesc.split('\n').length > 3) {
+                            $desc.addClass('collapsed-desc');
+                            $toggle.removeClass('d-none');
+                            $toggle.find('svg').css('transform', 'rotate(0deg)');
+                        } else {
+                            $desc.removeClass('collapsed-desc');
+                            $toggle.addClass('d-none');
+                        }
+
+                        // 绑定展开/收起事件
+                        $toggle.off('click').on('click', function() {
+                            const $icon = $(this).find('svg');
+                            if ($desc.hasClass('collapsed-desc')) {
+                                $desc.removeClass('collapsed-desc');
+                                $icon.css('transform', 'rotate(180deg)');
+                            } else {
+                                $desc.addClass('collapsed-desc');
+                                $icon.css('transform', 'rotate(0deg)');
+                            }
+                        });
+
                         $('#album-count').text(al.songs.length);
                         $('#album-tracks').empty();
                         al.songs.forEach(function(song, idx) {

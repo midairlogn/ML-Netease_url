@@ -508,9 +508,12 @@ input[name="separator-type"] + label:hover {
     transition: transform 0.3s ease;
 }
 
-/* Rotate icon when collapsed (default is up if 180deg, depends on logic, here we set logic in js) */
-/* Actually, simpler to handle rotation in CSS if possible, but JS is fine. */
-/* Just ensuring smooth transition */
+.collapsed-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
 
 /* ===== Task Manager Styles ===== */
 
