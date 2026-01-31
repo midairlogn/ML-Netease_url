@@ -196,8 +196,17 @@
                             <div class="text-muted" id="playlist-creator"></div>
                         </div>
                     </div>
-                    <div id="playlist-desc" class="mb-2 text-secondary small"></div>
-                    <div>共 <span id="playlist-count"></span> 首歌</div>
+                    <div id="playlist-desc-container" class="mb-2 text-secondary small">
+                        <div id="playlist-desc" style="white-space: pre-line;"></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="text-secondary small">共 <span id="playlist-count"></span> 首歌</div>
+                        <button id="playlist-desc-toggle" class="btn btn-link btn-sm p-0 text-decoration-none d-none" title="展开/收起">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-chevron-down transition-transform" viewBox="0 0 16 16">
+                                <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="button-container d-flex flex-wrap gap-2 align-items-center mb-3 mt-3">
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(true)">全选</button>
                         <button class="btn btn-outline-secondary btn-sm" onclick="ml_toggle_select_all(false)">取消选择</button>
@@ -866,7 +875,34 @@
                         $('#playlist-cover').attr('src', pl.coverImgUrl);
                         $('#playlist-name').text(pl.name);
                         $('#playlist-creator').text('by ' + pl.creator);
-                        $('#playlist-desc').text(pl.description || '');
+
+                        const $desc = $('#playlist-desc');
+                        const $toggle = $('#playlist-desc-toggle');
+                        const fullDesc = pl.description || '';
+                        $desc.text(fullDesc);
+
+                        // 处理折叠逻辑
+                        if (fullDesc.split('\n').length > 3) {
+                            $desc.addClass('collapsed-desc');
+                            $toggle.removeClass('d-none');
+                            $toggle.find('svg').css('transform', 'rotate(0deg)');
+                        } else {
+                            $desc.removeClass('collapsed-desc');
+                            $toggle.addClass('d-none');
+                        }
+
+                        // 绑定展开/收起事件
+                        $toggle.off('click').on('click', function() {
+                            const $icon = $(this).find('svg');
+                            if ($desc.hasClass('collapsed-desc')) {
+                                $desc.removeClass('collapsed-desc');
+                                $icon.css('transform', 'rotate(180deg)');
+                            } else {
+                                $desc.addClass('collapsed-desc');
+                                $icon.css('transform', 'rotate(0deg)');
+                            }
+                        });
+
                         $('#playlist-count').text(pl.trackCount);
                         $('#playlist-tracks').empty();
                         pl.tracks.forEach(function(song, idx) {
