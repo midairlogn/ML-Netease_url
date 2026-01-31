@@ -98,10 +98,10 @@
                         <div id="search-area">
                             <div class="mb-3">
                                 <label for="search_keywords" class="form-label">搜索关键词</label>
-                                <input type="text" id="search_keywords" class="form-control" placeholder="输入关键词进行搜索">
-                            </div>
-                            <div class="text-center">
-                                <button type="button" id="search-btn" class="btn btn-success w-50">搜索</button>
+                                <div class="input-group">
+                                    <input type="text" id="search_keywords" class="form-control" placeholder="输入关键词进行搜索">
+                                    <button type="button" id="search-btn" class="btn btn-success">搜索</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -110,10 +110,10 @@
                         <div id="parse-area">
                             <div class="mb-3">
                                 <label for="song_ids" class="form-label">歌曲ID或URL</label>
-                                <input type="text" id="song_ids" class="form-control" placeholder="输入歌曲ID或URL">
-                            </div>
-                            <div class="text-center">
-                                <button type="button" id="parse-btn" class="btn btn-primary w-50">解析</button>
+                                <div class="input-group">
+                                    <input type="text" id="song_ids" class="form-control" placeholder="输入歌曲ID或URL">
+                                    <button type="button" id="parse-btn" class="btn btn-primary">解析</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -122,10 +122,10 @@
                         <div id="playlist-area">
                             <div class="mb-3">
                                 <label for="playlist_id" class="form-label">歌单ID或链接</label>
-                                <input type="text" id="playlist_id" class="form-control" placeholder="输入歌单ID或网易云歌单链接">
-                            </div>
-                            <div class="text-center">
-                                <button type="button" id="playlist-btn" class="btn btn-warning w-50">解析歌单</button>
+                                <div class="input-group">
+                                    <input type="text" id="playlist_id" class="form-control" placeholder="输入歌单ID或网易云歌单链接">
+                                    <button type="button" id="playlist-btn" class="btn btn-warning">解析歌单</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -134,10 +134,10 @@
                         <div id="album-area">
                             <div class="mb-3">
                                 <label for="album_id" class="form-label">专辑ID或链接</label>
-                                <input type="text" id="album_id" class="form-control" placeholder="输入专辑ID或网易云专辑链接">
-                            </div>
-                            <div class="text-center">
-                                <button type="button" id="album-btn" class="btn btn-info w-50">解析专辑</button>
+                                <div class="input-group">
+                                    <input type="text" id="album_id" class="form-control" placeholder="输入专辑ID或网易云专辑链接">
+                                    <button type="button" id="album-btn" class="btn btn-info">解析专辑</button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -625,6 +625,14 @@
 
             // Initialize default tab
             window.activateTab('search');
+
+            // 监听回车键触发搜索/解析
+            $('.mode-content input').on('keypress', function(e) {
+                if (e.which === 13) {
+                    e.preventDefault();
+                    $(this).closest('.input-group').find('button').click();
+                }
+            });
 
             // 格式化日期
             function formatDate(timestamp) {
