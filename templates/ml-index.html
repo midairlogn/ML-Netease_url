@@ -282,7 +282,15 @@
         <div class="modal-dialog modal-lg modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="settingsModalLabel">设置</h5>
+                    <div class="d-flex align-items-center">
+                        <h5 class="modal-title me-3" id="settingsModalLabel">设置</h5>
+                        <span class="badge bg-light text-muted fw-normal" style="font-size: 0.75rem;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" class="bi bi-info-circle me-1" viewBox="0 0 16 16">
+                                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                <path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/>
+                            </svg>修改后自动保存
+                        </span>
+                    </div>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
@@ -400,8 +408,9 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">关闭</button>
+                <div class="modal-footer d-flex justify-content-between">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="ml_reset_defaults()">恢复默认设置</button>
+                    <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">关闭</button>
                 </div>
             </div>
         </div>
@@ -1329,6 +1338,37 @@
             $('input[name="separator-type"]').on('change', function() {
                 localStorage.setItem('ml_filename_separator', $(this).val() || DEFAULT_SEPARATOR);
             });
+
+            // 3. Reset to default settings
+            window.ml_reset_defaults = function() {
+                ml_show_Confirm('确认', '确定要将所有设置恢复为默认值吗？', 'warning').then((confirmed) => {
+                    if (confirmed) {
+                        localStorage.setItem('ml_audio_level', DEFAULT_AUDIO_LEVEL);
+                        localStorage.setItem('ml_concurrent_downloads', DEFAULT_CONCURRENT);
+                        localStorage.setItem('ml_search_limit', DEFAULT_SEARCH_LIMIT);
+                        localStorage.setItem('ml_filename_template', DEFAULT_FILENAME_TEMPLATE);
+                        localStorage.setItem('ml_filename_separator', DEFAULT_SEPARATOR);
+
+                        // Update UI
+                        $('#level').val(DEFAULT_AUDIO_LEVEL);
+                        $('#concurrent-downloads').val(DEFAULT_CONCURRENT);
+                        $('#search_limit').val(DEFAULT_SEARCH_LIMIT);
+                        $('#filename-template').val(''); // Display as empty if default
+                        $(`input[name="separator-type"][value="${DEFAULT_SEPARATOR}"]`).prop('checked', true);
+
+                        // Trigger updates
+                        $('#level').trigger('change');
+                        $('#filename-template').trigger('input');
+                        $('input[name="separator-type"]').trigger('change');
+
+                        ml_show_toast({
+                            type: 'completed',
+                            title: '重置成功',
+                            subtitle: '所有设置已恢复为默认值'
+                        });
+                    }
+                });
+            };
         });
     </script>
 </body>
