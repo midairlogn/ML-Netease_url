@@ -639,7 +639,11 @@
             $('.mode-content input').on('keypress', function(e) {
                 if (e.which === 13) {
                     e.preventDefault();
-                    $(this).closest('.input-group').find('button').click();
+                    const $btn = $(this).closest('.input-group').find('button');
+                    // 检查按钮是否已被禁用（正在解析中）
+                    if (!$btn.prop('disabled')) {
+                        $btn.click();
+                    }
                 }
             });
 

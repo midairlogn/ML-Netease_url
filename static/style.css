@@ -42,6 +42,16 @@ h1 {
     transition: all 0.2s ease;
 }
 
+/* 修复 input-group 中按钮的圆角被 Bootstrap 覆盖的问题 */
+.input-group > .btn {
+    border-radius: 8px !important;
+    margin-left: 5px !important; /* 增加一点间距，防止圆角重叠 */
+}
+
+.input-group > .form-control {
+    border-radius: 8px !important;
+}
+
 .form-control:focus, .form-select:focus {
     border-color: #80bdff;
     box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
