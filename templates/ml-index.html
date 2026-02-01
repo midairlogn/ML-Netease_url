@@ -8,6 +8,8 @@
     <link href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/twitter-bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/aplayer/1.10.1/APlayer.min.css">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <!-- Fuse.js for fuzzy search -->
+    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/fuse.js/7.0.0/fuse.min.js"></script>
 </head>
 <body class="d-flex flex-column min-vh-100">
     <!-- Task Manager Toggle Button -->
@@ -56,7 +58,7 @@
                     <span class="task-count text-muted small" id="completed-task-count">0</span>
                 </div>
                 <button type="button" id="clear-completed-tasks" class="btn btn-outline-secondary btn-sm" title="清空已完成">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                         <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
                     </svg>
@@ -409,7 +411,10 @@
                     </div>
                 </div>
                 <div class="modal-footer d-flex justify-content-between">
-                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="ml_reset_defaults()">恢复默认设置</button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="ml_reset_defaults()">恢复默认设置</button>
+                        <button type="button" class="btn btn-outline-warning btn-sm" id="ml_clear_all_history_btn">清空搜索历史</button>
+                    </div>
                     <button type="button" class="btn btn-primary btn-sm" data-bs-dismiss="modal">关闭</button>
                 </div>
             </div>
@@ -449,6 +454,7 @@
     <script src="{{ url_for('static', filename='ml-flac-writer.js') }}"></script>
     <script src="{{ url_for('static', filename='ml-func-plugins.js') }}"></script>
     <script src="{{ url_for('static', filename='ml-task-manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='ml-search-history.js') }}"></script>
 
     <!-- 自定义弹窗函数 -->
     <script>
@@ -534,6 +540,129 @@
     <script>
         $(document).ready(function() {
 
+            // ---------------------------------------------------------
+            // Search History & Local Cache Integration
+            // ---------------------------------------------------------
+
+            const historyManager = new SearchHistoryManager();
+
+            /**
+             * Create and show history dropdown
+             */
+            function ml_show_history(inputId, type) {
+                const $input = $(`#${inputId}`);
+                const query = $input.val();
+                const results = historyManager.search(query, type);
+                const $inputGroup = $input.closest('.input-group');
+
+                const typeMap = {
+                    'song': '歌曲',
+                    'playlist': '歌单',
+                    'album': '专辑',
+                    'general': '历史'
+                };
+
+                // Remove existing dropdown if any
+                $inputGroup.find('.ml-history-dropdown').remove();
+
+                const $dropdown = $('<div class="ml-history-dropdown show"></div>');
+
+                if (results.length === 0) {
+                    $dropdown.append('<div class="ml-history-empty">暂无相关历史记录</div>');
+                } else {
+                    results.forEach(item => {
+                        const displayType = typeMap[item.type] || item.type;
+                        const $item = $(`
+                            <div class="ml-history-item" data-id="${item.id}" data-type="${item.type}">
+                                <div class="item-info">
+                                    <div class="item-header">
+                                        <span class="item-type type-${item.type}">${displayType}</span>
+                                        <span class="item-name">${item.name}</span>
+                                    </div>
+                                    <div class="item-meta">${item.artist || ''}${item.artist && item.album ? ' - ' : ''}${item.album || ''}</div>
+                                </div>
+                                <div class="item-stats">
+                                    <div class="delete-history" title="删除记录">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+                                            <path d="M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z"/>
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+                        `);
+
+                        // Handle item click
+                        $item.on('click', function(e) {
+                            if ($(e.target).closest('.delete-history').length) {
+                                e.stopPropagation();
+                                historyManager.deleteItem(item.id, item.type);
+                                ml_show_history(inputId, type);
+                                return;
+                            }
+
+                            // If the button in the same input group is disabled, ignore the click
+                            const $btn = $inputGroup.find('button');
+                            if ($btn.prop('disabled')) {
+                                return;
+                            }
+
+                            $dropdown.remove();
+
+                            // Logic for associating Search Box with Song Parse
+                            // If a song item is clicked from the general search box, redirect to parse tab
+                            if (inputId === 'search_keywords' && item.type === 'song') {
+                                window.activateTab('parse');
+                                $('#song_ids').val(item.id);
+                                $('html,body').animate({scrollTop: $('#main-form').offset().top}, 300);
+
+                                // Auto trigger parse
+                                setTimeout(() => {
+                                    $('#parse-btn').click();
+                                }, 150);
+                                return;
+                            }
+
+                            $input.val(item.id || item.name);
+
+                            // Auto trigger search/parse
+                            $inputGroup.find('button').click();
+                        });
+
+                        $dropdown.append($item);
+                    });
+
+                    const $footer = $(`
+                        <div class="ml-history-footer">
+                            <span>匹配结果: ${results.length}</span>
+                            <a href="#" class="ml-history-clear-all">清空所有历史</a>
+                        </div>
+                    `);
+
+                    $footer.find('.ml-history-clear-all').on('click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        ml_show_Confirm('清空历史', '确定要清空所有搜索历史吗？').then(confirmed => {
+                            if (confirmed) {
+                                historyManager.clearHistory();
+                                $dropdown.remove();
+                                // Success Toast
+                                if (typeof ml_show_toast === 'function') {
+                                    ml_show_toast({
+                                        type: 'completed',
+                                        title: '已完成',
+                                        subtitle: '搜索历史记录已全部清除'
+                                    });
+                                }
+                            }
+                        });
+                    });
+
+                    $dropdown.append($footer);
+                }
+
+                $inputGroup.append($dropdown);
+            }
+
             /**
              * Debounce function to limit excessive function calls
              */
@@ -545,6 +674,54 @@
                     timeout = setTimeout(() => func.apply(context, args), wait);
                 };
             }
+
+            // Setup event listeners for inputs
+            const historyConfigs = [
+                { id: 'search_keywords', type: 'general' },
+                { id: 'song_ids', type: 'song' },
+                { id: 'playlist_id', type: 'playlist' },
+                { id: 'album_id', type: 'album' }
+            ];
+
+            historyConfigs.forEach(config => {
+                const $input = $(`#${config.id}`);
+
+                // Immediate show on focus
+                $input.on('focus', function() {
+                    ml_show_history(config.id, config.type);
+                });
+
+                // Debounced show on input
+                $input.on('input', ml_debounce(function() {
+                    ml_show_history(config.id, config.type);
+                }, 300));
+            });
+
+            // Close dropdown when clicking outside
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('.input-group').length) {
+                    $('.ml-history-dropdown').remove();
+                }
+            });
+
+            // Expose for saving logic
+            window.ml_history_manager = historyManager;
+
+            // Settings Modal - Clear History Button Logic
+            $('#ml_clear_all_history_btn').on('click', function() {
+                ml_show_Confirm('清空历史', '确定要清空所有搜索历史吗？').then(confirmed => {
+                    if (confirmed) {
+                        historyManager.clearHistory();
+                        if (typeof ml_show_toast === 'function') {
+                            ml_show_toast({
+                                type: 'completed',
+                                title: '已完成',
+                                subtitle: '搜索历史记录已全部清除'
+                            });
+                        }
+                    }
+                });
+            });
 
             const ap = new APlayer({
                 container: document.getElementById('aplayer'),
@@ -756,6 +933,12 @@
                                 return;
                             }
 
+                            // Save to history
+                            historyManager.saveItem({
+                                id: keywords,
+                                type: 'general',
+                                name: keywords
+                            });
                             ml_song_list.length = 0;
                             $('#search-list').empty();
                             validResults.forEach(function(song) {
@@ -868,6 +1051,14 @@
                     console.log("单曲解析");
                     console.log(data);
                     if (data.status === 200 && data.id) {
+                        // Save to history
+                        historyManager.saveItem({
+                            id: String(data.id),
+                            type: 'song',
+                            name: data.name,
+                            artist: data.ar_name,
+                            album: data.al_name
+                        });
                         $('#song_name').text(data.name);
                         $('#artist_names').text(data.ar_name);
                         $('#song_alname').text(data.al_name);
@@ -987,6 +1178,13 @@
                     console.log(data);
                     if (data.status === 200 && data.playlist && data.playlist.tracks.length > 0) {
                         const pl = data.playlist;
+                        // Save to history
+                        historyManager.saveItem({
+                            id: String(pid),
+                            type: 'playlist',
+                            name: pl.name,
+                            artist: pl.creator
+                        });
                         ml_song_list.length = 0;
                         $('#playlist-cover').attr('src', pl.coverImgUrl);
                         $('#playlist-name').text(pl.name);
@@ -1111,6 +1309,13 @@
                     console.log(data);
                     if (data.status === 200 && data.album && data.album.id) {
                         const al = data.album;
+                        // Save to history
+                        historyManager.saveItem({
+                            id: String(aid),
+                            type: 'album',
+                            name: al.name,
+                            artist: al.artist
+                        });
                         ml_song_list.length = 0;
                         $('#album-cover').attr('src', al.coverImgUrl);
                         $('#album-name').text(al.name);

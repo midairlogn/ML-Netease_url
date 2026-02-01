@@ -750,7 +750,205 @@ input[name="separator-type"] + label:hover {
     background: #a8a8a8;
 }
 
-/* Responsive adjustments for task manager */
+/* Search History Dropdown */
+.input-group {
+    position: relative;
+}
+
+.ml-history-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    right: 0;
+    z-index: 1060;
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 16px !important;
+    margin-left: 0 !important;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12), 0 4px 12px rgba(0,0,0,0.08);
+    max-height: 380px;
+    overflow-y: auto;
+    display: none;
+    padding: 8px;
+    /* Hide scrollbar for cleaner look */
+    scrollbar-width: thin;
+    scrollbar-color: #e0e0e0 transparent;
+}
+
+.ml-history-dropdown::-webkit-scrollbar {
+    width: 6px;
+}
+
+.ml-history-dropdown::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.ml-history-dropdown::-webkit-scrollbar-thumb {
+    background-color: #e0e0e0;
+    border-radius: 3px;
+}
+
+.ml-history-dropdown.show {
+    display: block;
+    animation: historyFadeIn 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes historyFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.ml-history-item {
+    padding: 10px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: all 0.2s ease;
+    position: relative;
+    border-radius: 10px;
+    margin-bottom: 2px;
+}
+
+.ml-history-item:hover {
+    background: #f0f7ff;
+    transform: translateX(2px);
+}
+
+.ml-history-item:last-child {
+    margin-bottom: 0;
+}
+
+.ml-history-item .item-info {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    gap: 8px;
+}
+
+.ml-history-item .item-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.ml-history-item .item-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #333;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 200px;
+}
+
+.ml-history-item .item-type {
+    font-size: 0.65rem;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+}
+
+.type-song { background: #e3f2fd; color: #1976d2; }
+.type-playlist { background: #fce4ec; color: #c2185b; }
+.type-album { background: #e8f5e9; color: #388e3c; }
+.type-general { background: #f3f4f6; color: #4b5563; }
+
+.ml-history-item .item-meta {
+    font-size: 0.8rem;
+    color: #888;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 0;
+    flex: 1;
+}
+
+.ml-history-item .delete-history {
+    color: #ccc;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    line-height: 0;
+    margin-left: 8px;
+}
+
+.ml-history-item:hover .delete-history {
+    opacity: 1;
+}
+
+.ml-history-item .delete-history:hover {
+    color: #ff4757;
+    background: rgba(255, 71, 87, 0.1);
+    transform: scale(1.1);
+}
+
+.ml-history-item .delete-history svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+}
+
+.ml-history-empty {
+    padding: 30px 20px;
+    text-align: center;
+    color: #9ca3af;
+    font-size: 0.9rem;
+    font-style: italic;
+}
+
+.ml-history-footer {
+    padding: 10px 12px;
+    background: #fff;
+    border-top: 1px solid #f3f4f6;
+    font-size: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #9ca3af;
+    position: sticky;
+    bottom: -8px;
+    margin: 4px -8px -8px -8px;
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(5px);
+}
+
+.ml-history-clear-all {
+    color: #ef4444;
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.2s;
+    padding: 4px 8px;
+    border-radius: 6px;
+}
+
+.ml-history-clear-all:hover {
+    color: #dc2626;
+    background: rgba(239, 68, 68, 0.1);
+    text-decoration: none;
+}
+
+/* Response adjustments for task manager */
 @media (max-width: 400px) {
     #task-manager-panel {
         width: 100% !important;
