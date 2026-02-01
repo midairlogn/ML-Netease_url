@@ -705,14 +705,28 @@
                 $(this).val(val);
             });
 
+            // 输入框失去焦点自动清洗 (去除前后空格和引号)
+            $('#search_keywords, #song_ids, #playlist_id, #album_id').on('blur', function() {
+                let val = $(this).val().trim().replace(/^["']+|["']+$/g, '');
+                $(this).val(val);
+            });
+
             // 搜索功能
             $('#search-btn').on('click', function() {
                 const $btn = $(this);
-                const keywords = $('#search_keywords').val();
+                // 自动去除前后空格和引号
+                let keywords = $('#search_keywords').val().trim().replace(/^["']+|["']+$/g, '');
+                $('#search_keywords').val(keywords);
+
                 const limit = $('#search_limit').val();
                 ml_search_real_url = ml_song_info_post_url_base + '/Search';
                 if (!keywords) {
-                    ml_show_Alert('提示', '请输入搜索关键词', 'warning');
+                    ml_show_toast({
+                        type: 'error',
+                        title: '提示',
+                        subtitle: '请输入搜索关键词',
+                        cover: ''
+                    });
                     return;
                 }
                 // 设置按钮加载状态
@@ -727,9 +741,24 @@
                         console.log("搜索功能");
                         console.log(data);
                         if (data.status === 200 && data.result.length > 0) {
+                            // Filter out results where id is missing or null
+                            const validResults = data.result.filter(song => song.id !== null && song.id !== undefined && song.id !== '');
+
+                            if (validResults.length === 0) {
+                                $('#search-list').html('<li class="list-group-item">未找到有效歌曲</li>');
+                                $('#search-result').removeClass('d-none');
+                                ml_show_toast({
+                                    type: 'error',
+                                    title: '搜索失败',
+                                    subtitle: '搜索结果中未包含有效歌曲',
+                                    cover: ''
+                                });
+                                return;
+                            }
+
                             ml_song_list.length = 0;
                             $('#search-list').empty();
-                            data.result.forEach(function(song) {
+                            validResults.forEach(function(song) {
                                 const item = `<li class="list-group-item d-flex justify-content-between align-items-center">
                                     <div class="d-flex align-items-center">
                                         <input type="checkbox" class="song-checkbox form-check-input me-3" data-id="${song.id}" checked>
@@ -746,7 +775,7 @@
                             $('#search-result').removeClass('d-none');
 
                             // 显示搜索成功通知
-                            ml_show_search_success_toast(data.result.length);
+                            ml_show_search_success_toast(validResults.length);
 
                             // Initialize button state
                             ml_update_action_buttons_state();
@@ -768,12 +797,25 @@
                             });
                         } else {
                             $('#search-list').html('<li class="list-group-item">未找到相关歌曲</li>');
-                            $('#search-result').removeClass('d-none');
+                            $('#search-result').addClass('d-none');
+                            const errorMsg = data.status !== 200 ? data.msg : '未找到相关歌曲';
+                            ml_show_toast({
+                                type: 'error',
+                                title: '搜索失败',
+                                subtitle: errorMsg,
+                                cover: ''
+                            });
                         }
                     },
                     error: function() {
                         $('#search-list').html('<li class="list-group-item">搜索失败，请重试</li>');
-                        $('#search-result').removeClass('d-none');
+                        $('#search-result').addClass('d-none');
+                        ml_show_toast({
+                            type: 'error',
+                            title: '搜索失败',
+                            subtitle: '网络请求错误，请重试',
+                            cover: ''
+                        });
                     },
                     complete: function() {
                         // 恢复按钮状态
@@ -804,11 +846,19 @@
 
             // 单曲解析
             $('#parse-btn').on('click', function() {
-                const songIds = $('#song_ids').val();
+                // 自动去除前后空格和引号
+                let songIds = $('#song_ids').val().trim().replace(/^["']+|["']+$/g, '');
+                $('#song_ids').val(songIds);
+
                 const level = $('#level').val();
                 ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
                 if (!songIds) {
-                    ml_show_Alert('提示', '请输入歌曲ID或URL', 'warning');
+                    ml_show_toast({
+                        type: 'error',
+                        title: '提示',
+                        subtitle: '请输入歌曲ID或URL',
+                        cover: ''
+                    });
                     return;
                 }
                 // 设置按钮加载状态
@@ -817,7 +867,7 @@
                 $.post(ml_get_song_info_real_url, { url: songIds, level: level, type:'json' }, function(data) {
                     console.log("单曲解析");
                     console.log(data);
-                    if (data.status === 200) {
+                    if (data.status === 200 && data.id) {
                         $('#song_name').text(data.name);
                         $('#artist_names').text(data.ar_name);
                         $('#song_alname').text(data.al_name);
@@ -878,9 +928,24 @@
                             ml_add_single_song_task(songData, level);
                         });
                     } else {
-                        ml_show_Alert('解析失败', data.msg, 'error');
+                        $('#song-info').addClass('d-none');
+                        const errorMsg = data.status !== 200 ? data.msg : '未找到相关歌曲信息';
+                        ml_show_toast({
+                            type: 'error',
+                            title: '解析失败',
+                            subtitle: errorMsg,
+                            cover: ''
+                        });
                     }
-                }, 'json').always(function() {
+                }, 'json').fail(function() {
+                    $('#song-info').addClass('d-none');
+                    ml_show_toast({
+                        type: 'error',
+                        title: '解析失败',
+                        subtitle: '网络请求错误，请重试',
+                        cover: ''
+                    });
+                }).always(function() {
                     // 恢复按钮状态
                     ml_set_button_state('#parse-btn', false);
                 });
@@ -896,10 +961,18 @@
 
             // 歌单解析
             $('#playlist-btn').on('click', function() {
-                let pid = $('#playlist_id').val().trim();
+                // 自动去除前后空格和引号
+                let pid = $('#playlist_id').val().trim().replace(/^["']+|["']+$/g, '');
+                $('#playlist_id').val(pid);
+
                 ml_get_playlist_real_url = ml_song_info_post_url_base + '/Playlist';
                 if (!pid) {
-                    ml_show_Alert('提示', '请输入歌单ID或链接', 'warning');
+                    ml_show_toast({
+                        type: 'error',
+                        title: '提示',
+                        subtitle: '请输入歌单ID或链接',
+                        cover: ''
+                    });
                     return;
                 }
                 // 支持直接粘贴歌单链接
@@ -912,9 +985,9 @@
                 $.get(ml_get_playlist_real_url, { id: pid }, function(data) {
                     console.log("歌单解析");
                     console.log(data);
-                    if (data.status === 200) {
-                        ml_song_list.length = 0;
+                    if (data.status === 200 && data.playlist && data.playlist.tracks.length > 0) {
                         const pl = data.playlist;
+                        ml_song_list.length = 0;
                         $('#playlist-cover').attr('src', pl.coverImgUrl);
                         $('#playlist-name').text(pl.name);
                         $('#playlist-creator').text('by ' + pl.creator);
@@ -987,10 +1060,24 @@
                             add_songs_to_aplayer(selectedSongs, $('#level').val());
                         });
                     } else {
-                        $('#playlist-result').removeClass('d-none');
-                        $('#playlist-tracks').html('<li class="list-group-item">歌单解析失败：'+data.msg+'</li>');
+                        $('#playlist-result').addClass('d-none');
+                        const errorMsg = data.status !== 200 ? data.msg : '未找到相关歌单信息或歌单为空';
+                        ml_show_toast({
+                            type: 'error',
+                            title: '解析失败',
+                            subtitle: errorMsg,
+                            cover: ''
+                        });
                     }
-                }, 'json').always(function() {
+                }, 'json').fail(function() {
+                    $('#playlist-result').addClass('d-none');
+                    ml_show_toast({
+                        type: 'error',
+                        title: '解析失败',
+                        subtitle: '网络请求错误，请重试',
+                        cover: ''
+                    });
+                }).always(function() {
                     // 恢复按钮状态
                     ml_set_button_state('#playlist-btn', false);
                 });
@@ -998,10 +1085,18 @@
 
             // 专辑解析
             $(document).on('click', '#album-btn', function() {
-                let aid = $('#album_id').val().trim();
+                // 自动去除前后空格和引号
+                let aid = $('#album_id').val().trim().replace(/^["']+|["']+$/g, '');
+                $('#album_id').val(aid);
+
                 ml_get_album_real_url = ml_song_info_post_url_base + '/Album';
                 if (!aid) {
-                    ml_show_Alert('提示', '请输入专辑ID或链接', 'warning');
+                    ml_show_toast({
+                        type: 'error',
+                        title: '提示',
+                        subtitle: '请输入专辑ID或链接',
+                        cover: ''
+                    });
                     return;
                 }
                 // 支持直接粘贴专辑链接
@@ -1014,9 +1109,9 @@
                 $.get(ml_get_album_real_url, { id: aid }, function(data) {
                     console.log("专辑解析");
                     console.log(data);
-                    if (data.status === 200) {
-                        ml_song_list.length = 0;
+                    if (data.status === 200 && data.album && data.album.id) {
                         const al = data.album;
+                        ml_song_list.length = 0;
                         $('#album-cover').attr('src', al.coverImgUrl);
                         $('#album-name').text(al.name);
                         $('#album-artist').text(al.artist);
@@ -1090,10 +1185,24 @@
                             add_songs_to_aplayer(selectedSongs, $('#level').val());
                         });
                     } else {
-                        $('#album-result').removeClass('d-none');
-                        $('#album-tracks').html('<li class="list-group-item">专辑解析失败：'+data.msg+'</li>');
+                        $('#album-result').addClass('d-none');
+                        const errorMsg = data.status !== 200 ? data.msg : '未找到相关专辑信息';
+                        ml_show_toast({
+                            type: 'error',
+                            title: '解析失败',
+                            subtitle: errorMsg,
+                            cover: ''
+                        });
                     }
-                }, 'json').always(function() {
+                }, 'json').fail(function() {
+                    $('#album-result').addClass('d-none');
+                    ml_show_toast({
+                        type: 'error',
+                        title: '解析失败',
+                        subtitle: '网络请求错误，请重试',
+                        cover: ''
+                    });
+                }).always(function() {
                     // 恢复按钮状态
                     ml_set_button_state('#album-btn', false);
                 });
