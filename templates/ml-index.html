@@ -838,12 +838,19 @@
             $('.mode-content input').on('keypress', function(e) {
                 if (e.which === 13) {
                     e.preventDefault();
+                    // 隐藏联想下拉菜单
+                    $('.ml-history-dropdown').remove();
                     const $btn = $(this).closest('.input-group').find('button');
                     // 检查按钮是否已被禁用（正在解析中）
                     if (!$btn.prop('disabled')) {
                         $btn.click();
                     }
                 }
+            });
+
+            // 监听搜索/解析按钮点击，隐藏联想下拉菜单
+            $('.mode-content .input-group button').on('click', function() {
+                $('.ml-history-dropdown').remove();
             });
 
             // 格式化日期
