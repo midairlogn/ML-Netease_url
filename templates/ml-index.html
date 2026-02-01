@@ -534,6 +534,18 @@
     <script>
         $(document).ready(function() {
 
+            /**
+             * Debounce function to limit excessive function calls
+             */
+            function ml_debounce(func, wait) {
+                let timeout;
+                return function(...args) {
+                    const context = this;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
+            }
+
             const ap = new APlayer({
                 container: document.getElementById('aplayer'),
                 lrcType: 1,
@@ -592,6 +604,16 @@
             // Tab switching logic
             // Expose activateTab to global scope so it can be called from other event handlers
             window.activateTab = function(selectedMode) {
+                // 如果正在搜索或解析，阻止切换（仅检查主表单内的按钮状态）
+                if ($('#main-form .input-group button:disabled').length) {
+                    ml_show_toast({
+                        type: 'warning',
+                        title: '请稍候',
+                        subtitle: '当前任务正在处理中，请完成后再切换'
+                    });
+                    return;
+                }
+
                 const tabItems = document.querySelectorAll('.tab-item');
                 const modeContentAreas = document.querySelectorAll('.mode-content');
 
