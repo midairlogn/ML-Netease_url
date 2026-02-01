@@ -775,16 +775,28 @@ function ml_show_toast(options) {
         createdAt: Date.now()
     };
 
-    ml_toast_manager.toasts.push(toast);
+    // 添加到数组头部（最新的在最前）
+    ml_toast_manager.toasts.unshift(toast);
 
     // 创建Toast元素
     const toastHtml = ml_create_toast_html(toast);
+
+    // 插入到容器最前面（视觉上的最下方，因为flex-direction: column）
+    // 为了实现从右侧滑入到底部的效果，我们使用 prepend (如果是 column-reverse 则用 append)
+    // 根据 CSS 的设计，#ml-toast-container 是 flex-direction: column
+    // 所以最新的元素应该添加到后面，或者使用 order 控制
+    // 让我们使用 prepend，这样最新的在最上面，但是通过 CSS 控制位置
+
+    // 修改策略：CSS中 #ml-toast-container 使用 flex-direction: column
+    // 我们希望新的 toast 出现在最底部。所以使用 append。
     $('#ml-toast-container').append(toastHtml);
 
+    // 强制重绘以确保动画生效
+    const $toast = $(`#ml-toast-${toastId}`);
+    $toast[0].offsetHeight;
+
     // 动画显示
-    setTimeout(() => {
-        $(`#ml-toast-${toastId}`).addClass('show');
-    }, 50);
+    $toast.addClass('show');
 
     // 自动关闭
     setTimeout(() => {
@@ -804,30 +816,74 @@ function ml_close_toast(toastId) {
     const $toast = $(`#ml-toast-${toastId}`);
     if ($toast.length === 0) return;
 
+    // 标记为正在隐藏
+    $toast.addClass('hiding');
     $toast.removeClass('show');
 
+    // 从数组中移除
+    ml_toast_manager.toasts = ml_toast_manager.toasts.filter(t => t.id !== toastId);
+
+    // 立即更新其他 Toast 的堆叠状态
+    ml_manage_toast_stack();
+
+    // 等待动画结束后移除 DOM
     setTimeout(() => {
         $toast.remove();
-        ml_toast_manager.toasts = ml_toast_manager.toasts.filter(t => t.id !== toastId);
+        // 再次更新以防万一
         ml_manage_toast_stack();
-    }, 300);
+    }, 400);
 }
 
 /**
  * 管理Toast堆叠显示
  */
 function ml_manage_toast_stack() {
-    const $toasts = $('#ml-toast-container .ml-toast');
+    const $toasts = $('#ml-toast-container .ml-toast:not(.hiding)');
     const maxVisible = ml_toast_manager.maxVisibleToasts;
 
-    $toasts.each(function(index) {
-        const reverseIndex = $toasts.length - 1 - index;
-        if (reverseIndex >= maxVisible) {
-            $(this).addClass('collapsed');
+    // 获取当前所有活动的 toast ID（从新到旧）
+    const activeToastIds = [];
+    $toasts.each(function() {
+        activeToastIds.push(parseInt($(this).attr('id').replace('ml-toast-', '')));
+    });
+    // 反转，使得最新的在前面
+    activeToastIds.reverse();
+
+    activeToastIds.forEach((id, index) => {
+        const $el = $(`#ml-toast-${id}`);
+
+        // 重置所有堆叠类和高度
+        $el.removeClass('stacked stacked-2 stacked-hidden');
+        $el.css('max-height', '');
+
+        if (index < 3) {
+            // 最新的3条，正常完全显示
+            $el.css('z-index', 1100 - index);
+        } else if (index === 3) {
+            // 第4条，堆叠效果1 (位置下调，露出标题)
+            $el.addClass('stacked');
+            $el.css('z-index', 1090);
+        } else if (index === 4) {
+            // 第5条，堆叠效果2 (进一步下调)
+            $el.addClass('stacked-2');
+            $el.css('z-index', 1080);
         } else {
-            $(this).removeClass('collapsed');
+            // 超出5条，隐藏
+            $el.addClass('stacked-hidden');
         }
     });
+
+    // 移除超出最大限制的旧 Toast (彻底清理 DOM)
+    if (activeToastIds.length > maxVisible) {
+        const toRemoveIds = activeToastIds.slice(maxVisible);
+        toRemoveIds.forEach(id => {
+            const $el = $(`#ml-toast-${id}`);
+            if (!$el.hasClass('hiding')) {
+                $el.remove();
+                ml_toast_manager.toasts = ml_toast_manager.toasts.filter(t => t.id !== id);
+            }
+        });
+    }
 }
 
 /**
