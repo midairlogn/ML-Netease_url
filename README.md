@@ -43,6 +43,8 @@ MUSIC_U=`YOUR MUSIC_U`;os=pc;appver=8.9.75;
 
 > 请参考 `cookie.txt.example` 示例，把`YOUR MUSIC_U`替换为你自己的即可（不保留``）。
 
+> 关于 `MUSIC_U` 的获取，请参考 [获取 `MUSIC_U` 的方法](MUSIC_U/get-MUSIC_U.md).
+
 ### 3. 运行
 
 #### GUI 模式
