@@ -4,4 +4,5 @@ __pycache__
 .vscode
 python-3.12.4-embed-amd64
 ml-launch-api.bat
+ml-get-MUSIC_U.bat
 windows-portable-release
