@@ -173,7 +173,7 @@
             <div class="row g-0 align-items-stretch">
                 <div class="col-md-8 p-3 d-flex flex-column justify-content-between">
                     <h4 class="mb-2" id="song_name" style="font-weight:700;"></h4>
-                    <button id="downloadMusicButton" class="btn btn-primary mt-3">下载(并写入元数据)</button>
+                    <button id="downloadMusicButton" class="btn btn-primary mt-3">下载</button>
                     <div class="mb-2"><span class="badge bg-primary me-2">歌手</span><span id="artist_names"></span></div>
                     <div class="mb-2"><span class="badge bg-secondary me-2">专辑</span><span id="song_alname"></span></div>
                     <div class="mb-2"><span class="badge bg-success me-2">音质</span><span id="song_level"></span></div>
@@ -404,6 +404,54 @@
                                             </svg>预览:
                                         </span>
                                         <span id="filename-preview" class="font-monospace text-dark fw-bold"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 自定义写入元数据 -->
+                        <div class="card border-0 shadow-sm mt-3" style="background-color: #f8f9fa;">
+                            <div class="card-header bg-transparent border-0 p-3">
+                                <h6 class="card-title fw-bold text-primary mb-0 d-flex align-items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-tags me-2" viewBox="0 0 16 16">
+                                        <path d="M1 7.775V2.75C1 1.784 1.784 1 2.75 1h5.025c.464 0 .91.184 1.238.513l6.25 6.25a1.75 1.75 0 0 1 0 2.474l-5.026 5.026a1.75 1.75 0 0 1-2.474 0l-6.25-6.25A1.752 1.752 0 0 1 1 7.775Zm1.5 0c0 .066.026.13.073.177l6.25 6.25a.25.25 0 0 0 .354 0l5.025-5.025a.25.25 0 0 0 0-.354l-6.25-6.25a.25.25 0 0 0-.177-.073H2.75a.25.25 0 0 0-.25.25ZM6 5a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z"></path>
+                                    </svg>自定义写入元数据
+                                </h6>
+                            </div>
+                            <div class="card-body p-3 pt-0">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" id="metadata-write-enabled">
+                                    <label class="form-check-label" for="metadata-write-enabled">写入元数据</label>
+                                </div>
+
+                                <div class="d-flex align-items-center gap-3 mb-3" id="metadata-write-options">
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="checkbox" id="metadata-write-cover">
+                                        <label class="form-check-label" for="metadata-write-cover">封面</label>
+                                    </div>
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="checkbox" id="metadata-write-artist">
+                                        <label class="form-check-label" for="metadata-write-artist">歌手</label>
+                                    </div>
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="checkbox" id="metadata-write-album">
+                                        <label class="form-check-label" for="metadata-write-album">专辑</label>
+                                    </div>
+                                    <div class="form-check mb-0">
+                                        <input class="form-check-input" type="checkbox" id="metadata-write-lyrics">
+                                        <label class="form-check-label" for="metadata-write-lyrics">歌词</label>
+                                    </div>
+                                </div>
+
+                                <div class="p-2 rounded" style="background-color: #e7f1ff; border-left: 4px solid #0d6efd;">
+                                    <div class="d-flex align-items-center small text-primary">
+                                        <span class="me-2 fw-bold">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="bi bi-eye-fill me-1" viewBox="0 0 16 16">
+                                                <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                                                <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
+                                            </svg>预览:
+                                        </span>
+                                        <span id="metadata-write-preview" class="font-monospace text-dark fw-bold"></span>
                                     </div>
                                 </div>
                             </div>
@@ -1582,6 +1630,53 @@
             const DEFAULT_CONCURRENT = "3";
             const DEFAULT_SEARCH_LIMIT = "10";
             const DEFAULT_SEPARATOR = "_";
+            const DEFAULT_METADATA_WRITE_ENABLED = "true";
+            const DEFAULT_METADATA_WRITE_COVER = "true";
+            const DEFAULT_METADATA_WRITE_ARTIST = "true";
+            const DEFAULT_METADATA_WRITE_ALBUM = "true";
+            const DEFAULT_METADATA_WRITE_LYRICS = "true";
+
+            function ml_get_or_init_bool_setting(key, defaultValue) {
+                let value = localStorage.getItem(key);
+                if (value === null) {
+                    value = defaultValue;
+                    localStorage.setItem(key, value);
+                }
+                return value === 'true';
+            }
+
+            function ml_save_metadata_write_settings() {
+                localStorage.setItem('ml_metadata_write_enabled', $('#metadata-write-enabled').is(':checked') ? 'true' : 'false');
+                localStorage.setItem('ml_metadata_write_cover', $('#metadata-write-cover').is(':checked') ? 'true' : 'false');
+                localStorage.setItem('ml_metadata_write_artist', $('#metadata-write-artist').is(':checked') ? 'true' : 'false');
+                localStorage.setItem('ml_metadata_write_album', $('#metadata-write-album').is(':checked') ? 'true' : 'false');
+                localStorage.setItem('ml_metadata_write_lyrics', $('#metadata-write-lyrics').is(':checked') ? 'true' : 'false');
+            }
+
+            function ml_update_metadata_write_ui_state() {
+                const enabled = $('#metadata-write-enabled').is(':checked');
+                $('#metadata-write-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-lyrics').prop('disabled', !enabled);
+            }
+
+            function ml_update_metadata_write_preview() {
+                const enabled = $('#metadata-write-enabled').is(':checked');
+                if (!enabled) {
+                    $('#metadata-write-preview').text('不写入元数据');
+                    return;
+                }
+
+                const selectedItems = [];
+                if ($('#metadata-write-cover').is(':checked')) selectedItems.push('封面');
+                if ($('#metadata-write-artist').is(':checked')) selectedItems.push('歌手');
+                if ($('#metadata-write-album').is(':checked')) selectedItems.push('专辑');
+                if ($('#metadata-write-lyrics').is(':checked')) selectedItems.push('歌词');
+
+                if (selectedItems.length === 0) {
+                    $('#metadata-write-preview').text('不写入元数据');
+                } else {
+                    $('#metadata-write-preview').text(`元数据写入：${selectedItems.join('/')}`);
+                }
+            }
 
             // 1. Load settings on startup
 
@@ -1630,6 +1725,21 @@
                 localStorage.setItem('ml_filename_separator', savedSeparator);
             }
             $(`input[name="separator-type"][value="${savedSeparator}"]`).prop('checked', true);
+
+            // Metadata write settings
+            const savedMetadataWriteEnabled = ml_get_or_init_bool_setting('ml_metadata_write_enabled', DEFAULT_METADATA_WRITE_ENABLED);
+            const savedMetadataWriteCover = ml_get_or_init_bool_setting('ml_metadata_write_cover', DEFAULT_METADATA_WRITE_COVER);
+            const savedMetadataWriteArtist = ml_get_or_init_bool_setting('ml_metadata_write_artist', DEFAULT_METADATA_WRITE_ARTIST);
+            const savedMetadataWriteAlbum = ml_get_or_init_bool_setting('ml_metadata_write_album', DEFAULT_METADATA_WRITE_ALBUM);
+            const savedMetadataWriteLyrics = ml_get_or_init_bool_setting('ml_metadata_write_lyrics', DEFAULT_METADATA_WRITE_LYRICS);
+
+            $('#metadata-write-enabled').prop('checked', savedMetadataWriteEnabled);
+            $('#metadata-write-cover').prop('checked', savedMetadataWriteCover);
+            $('#metadata-write-artist').prop('checked', savedMetadataWriteArtist);
+            $('#metadata-write-album').prop('checked', savedMetadataWriteAlbum);
+            $('#metadata-write-lyrics').prop('checked', savedMetadataWriteLyrics);
+            ml_update_metadata_write_ui_state();
+            ml_update_metadata_write_preview();
 
             // Trigger updates to ensure UI consistency
             // Note: Triggering change/input will invoke the save listeners below,
@@ -1686,6 +1796,17 @@
                 localStorage.setItem('ml_filename_separator', $(this).val() || DEFAULT_SEPARATOR);
             });
 
+            $('#metadata-write-enabled').on('change', function() {
+                ml_update_metadata_write_ui_state();
+                ml_save_metadata_write_settings();
+                ml_update_metadata_write_preview();
+            });
+
+            $('#metadata-write-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-lyrics').on('change', function() {
+                ml_save_metadata_write_settings();
+                ml_update_metadata_write_preview();
+            });
+
             // 3. Reset to default settings
             window.ml_reset_defaults = function() {
                 ml_show_Confirm('确认', '确定要将所有设置恢复为默认值吗？', 'warning').then((confirmed) => {
@@ -1695,6 +1816,11 @@
                         localStorage.setItem('ml_search_limit', DEFAULT_SEARCH_LIMIT);
                         localStorage.setItem('ml_filename_template', DEFAULT_FILENAME_TEMPLATE);
                         localStorage.setItem('ml_filename_separator', DEFAULT_SEPARATOR);
+                        localStorage.setItem('ml_metadata_write_enabled', DEFAULT_METADATA_WRITE_ENABLED);
+                        localStorage.setItem('ml_metadata_write_cover', DEFAULT_METADATA_WRITE_COVER);
+                        localStorage.setItem('ml_metadata_write_artist', DEFAULT_METADATA_WRITE_ARTIST);
+                        localStorage.setItem('ml_metadata_write_album', DEFAULT_METADATA_WRITE_ALBUM);
+                        localStorage.setItem('ml_metadata_write_lyrics', DEFAULT_METADATA_WRITE_LYRICS);
 
                         // Update UI
                         $('#level').val(DEFAULT_AUDIO_LEVEL);
@@ -1702,6 +1828,13 @@
                         $('#search_limit').val(DEFAULT_SEARCH_LIMIT);
                         $('#filename-template').val(''); // Display as empty if default
                         $(`input[name="separator-type"][value="${DEFAULT_SEPARATOR}"]`).prop('checked', true);
+                        $('#metadata-write-enabled').prop('checked', DEFAULT_METADATA_WRITE_ENABLED === 'true');
+                        $('#metadata-write-cover').prop('checked', DEFAULT_METADATA_WRITE_COVER === 'true');
+                        $('#metadata-write-artist').prop('checked', DEFAULT_METADATA_WRITE_ARTIST === 'true');
+                        $('#metadata-write-album').prop('checked', DEFAULT_METADATA_WRITE_ALBUM === 'true');
+                        $('#metadata-write-lyrics').prop('checked', DEFAULT_METADATA_WRITE_LYRICS === 'true');
+                        ml_update_metadata_write_ui_state();
+                        ml_update_metadata_write_preview();
 
                         // Trigger updates
                         $('#level').trigger('change');

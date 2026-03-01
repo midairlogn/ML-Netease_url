@@ -387,6 +387,19 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
         const audioFormat = getAudioFormatByLevel(audioLevel);
         console.log(`当前音质级别: ${audioLevel}, 格式: ${audioFormat}`);
 
+        const metadataWriteConfig = {
+            enabled: (localStorage.getItem('ml_metadata_write_enabled') ?? 'true') === 'true',
+            cover: (localStorage.getItem('ml_metadata_write_cover') ?? 'true') === 'true',
+            artist: (localStorage.getItem('ml_metadata_write_artist') ?? 'true') === 'true',
+            album: (localStorage.getItem('ml_metadata_write_album') ?? 'true') === 'true',
+            lyrics: (localStorage.getItem('ml_metadata_write_lyrics') ?? 'true') === 'true'
+        };
+
+        const shouldWriteCover = metadataWriteConfig.enabled && metadataWriteConfig.cover;
+        const shouldWriteArtist = metadataWriteConfig.enabled && metadataWriteConfig.artist;
+        const shouldWriteAlbum = metadataWriteConfig.enabled && metadataWriteConfig.album;
+        const shouldWriteLyrics = metadataWriteConfig.enabled && metadataWriteConfig.lyrics;
+
         // 获取文件名模板并生成基础文件名 (不含后缀)
         const filenameTemplate = $('#filename-template').val();
         const metadata = {
@@ -442,13 +455,18 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             const writer = new ID3Writer(audioBuffer);
 
             // 设置标签
-            writer
-                .setFrame('TIT2', name)      // 标题
-                .setFrame('TPE1', [ar_name]) // 艺术家（数组）
-                .setFrame('TALB', al_name);  // 专辑
+            writer.setFrame('TIT2', name); // 标题（始终写入）
+
+            if (shouldWriteArtist) {
+                writer.setFrame('TPE1', [ar_name]); // 艺术家（数组）
+            }
+
+            if (shouldWriteAlbum) {
+                writer.setFrame('TALB', al_name);  // 专辑
+            }
 
             // 歌词
-            if (processedLyrics) {
+            if (shouldWriteLyrics && processedLyrics) {
                 writer.setFrame('USLT', {
                     language: 'und',
                     description: '',
@@ -457,7 +475,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             }
 
             // 封面
-            if (coverBuffer && coverMimeType) {
+            if (shouldWriteCover && coverBuffer && coverMimeType) {
                 writer.setFrame('APIC', {
                     type: 3,
                     data: coverBuffer,
@@ -484,12 +502,17 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                 console.warn("警告：期望 FLAC 格式但文件头不匹配，将尝试作为 MP3 处理...");
                 // 如果不是 FLAC，回退到 MP3 处理
                 const writer = new ID3Writer(audioBuffer);
-                writer
-                    .setFrame('TIT2', name)
-                    .setFrame('TPE1', [ar_name])
-                    .setFrame('TALB', al_name);
+                writer.setFrame('TIT2', name); // 标题（始终写入）
 
-                if (processedLyrics) {
+                if (shouldWriteArtist) {
+                    writer.setFrame('TPE1', [ar_name]);
+                }
+
+                if (shouldWriteAlbum) {
+                    writer.setFrame('TALB', al_name);
+                }
+
+                if (shouldWriteLyrics && processedLyrics) {
                     writer.setFrame('USLT', {
                         language: 'und',
                         description: '',
@@ -497,7 +520,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                     });
                 }
 
-                if (coverBuffer && coverMimeType) {
+                if (shouldWriteCover && coverBuffer && coverMimeType) {
                     writer.setFrame('APIC', {
                         type: 3,
                         data: coverBuffer,
@@ -515,18 +538,23 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                 const writer = new FlacWriter(audioBuffer);
 
                 // 设置 Vorbis 注释标签
-                writer
-                    .setFrame('TITLE', name)
-                    .setFrame('ARTIST', ar_name)
-                    .setFrame('ALBUM', al_name);
+                writer.setFrame('TITLE', name); // 标题（始终写入）
+
+                if (shouldWriteArtist) {
+                    writer.setFrame('ARTIST', ar_name);
+                }
+
+                if (shouldWriteAlbum) {
+                    writer.setFrame('ALBUM', al_name);
+                }
 
                 // 歌词
-                if (processedLyrics) {
+                if (shouldWriteLyrics && processedLyrics) {
                     writer.setFrame('LYRICS', processedLyrics);
                 }
 
                 // 封面
-                if (coverBuffer && coverMimeType) {
+                if (shouldWriteCover && coverBuffer && coverMimeType) {
                     writer.setPicture(coverBuffer, coverMimeType, 'Cover');
                 }
 
