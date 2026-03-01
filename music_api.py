@@ -349,7 +349,7 @@ def qr_login():
         code, cookies = check_qr_login(unikey)
         if code == 803:
             print("\n登录成功！")
-            return 'MUSIC_U=' + cookies['MUSIC_U'] + ';os=pc;appver=8.9.70;'  # 修复字符串拼接
+            return 'MUSIC_U=' + cookies['MUSIC_U'] + ';os=pc;appver=8.9.75;'  # 修复字符串拼接
         elif code == 801:
             print("\r等待扫码...", end='')
         elif code == 802:

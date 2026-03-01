@@ -7,3 +7,9 @@ if cookies:
     print(cookies)
 else:
     print("登录失败，请重试。")
+
+# Pause before exit so user can see output
+try:
+    input("\n按回车键退出...")  # Python 3
+except NameError:
+    pass
