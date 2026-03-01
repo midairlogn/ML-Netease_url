@@ -7,13 +7,13 @@ function lrctrim(lyrics) {
     const data = [];
 
     lines.forEach((line, index) => {
-        const matches = line.match(/\[(\d{2}):(\d{2}[\.:]?\d*)]/);
+        const matches = line.match(/\[(\d{2}):([0-5]\d(?:\.\d{1,3})?)]/);
         if (matches) {
             const minutes = parseInt(matches[1], 10);
-            const seconds = parseFloat(matches[2].replace('.', ':')) || 0;
-            const timestamp = minutes * 60000 + seconds * 1000;
+            const seconds = parseFloat(matches[2]) || 0;
+            const timestamp = Math.round(minutes * 60000 + seconds * 1000);
 
-            let text = line.replace(/\[\d{2}:\d{2}[\.:]?\d*\]/g, '').trim();
+            let text = line.replace(/\[\d{2}:[0-5]\d(?:\.\d{1,3})?]/g, '').trim();
             text = text.replace(/\s\s+/g, ' '); // Replace multiple spaces with a single space
 
             data.push([timestamp, index, text]);
