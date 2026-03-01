@@ -116,9 +116,10 @@ python main.py --mode api
 
 [GNU General Public License v3.0](LICENSE)
 
-## 致谢
+## 致谢和相关项目
 
 - [Netease_url (Ravizhan)](https://github.com/Suxiaoqinx/Netease_url/)
+- [ML-Netease_Android (Midairlogn)](https://github.com/midairlogn/ML-Netease_Android)
 
 ---
 
