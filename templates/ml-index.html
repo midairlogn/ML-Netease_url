@@ -1121,8 +1121,14 @@
                         $('#song_size').text(data.size);
                         let processedLyrics = data.lyric;
                         if (data.tlyric) {
-                            processedLyrics = lrctran(data.lyric, data.tlyric);
+                            processedLyrics = lrctran(
+                                ml_sanitize_lrc_timestamps(data.lyric),
+                                ml_sanitize_lrc_timestamps(data.tlyric)
+                            );
+                        } else {
+                            processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
                         }
+                        processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
                         $('#lyric').html(processedLyrics.replace(/\n/g, '<br>'));
                         // 根据音质级别确定链接文本
                         const mp3Levels = ['standard', 'exhigh'];
@@ -1584,8 +1590,14 @@
                         if(songAdded && response){
                             let processedLyrics = response.lyric;
                             if(response.tlyric){
-                                processedLyrics = lrctran(response.lyric, response.tlyric);
+                                processedLyrics = lrctran(
+                                    ml_sanitize_lrc_timestamps(response.lyric),
+                                    ml_sanitize_lrc_timestamps(response.tlyric)
+                                );
+                            } else {
+                                processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
                             }
+                            processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
                             ml_song_detailed = {
                                 id: song.id, // Ensure ID is stored for duplicate checking
                                 name: response.name,

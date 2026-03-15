@@ -243,8 +243,14 @@ async function ml_execute_single_task(task) {
 
             let processedLyrics = response.lyric;
             if (response.tlyric) {
-                processedLyrics = lrctran(response.lyric, response.tlyric);
+                processedLyrics = lrctran(
+                    ml_sanitize_lrc_timestamps(response.lyric),
+                    ml_sanitize_lrc_timestamps(response.tlyric)
+                );
+            } else {
+                processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
             }
+            processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
 
             // Check if paused
             while (task.isPaused && task.status !== ML_TASK_STATUS.CANCELLED) {
@@ -327,8 +333,14 @@ async function ml_execute_batch_task(task) {
                     if (response.status === 200) {
                         let processedLyrics = response.lyric;
                         if (response.tlyric) {
-                            processedLyrics = lrctran(response.lyric, response.tlyric);
+                            processedLyrics = lrctran(
+                                ml_sanitize_lrc_timestamps(response.lyric),
+                                ml_sanitize_lrc_timestamps(response.tlyric)
+                            );
+                        } else {
+                            processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
                         }
+                        processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
 
                         await ml_music_download(
                             response.al_name,

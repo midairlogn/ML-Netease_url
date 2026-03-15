@@ -55,6 +55,53 @@ function lrctran(lyric, tlyric) {
     return result;
 }
 
+function ml_sanitize_lrc_timestamps(lyrics) {
+    if (!lyrics) return lyrics;
+    return lyrics.replace(/\[(\d{2}):([0-5]\d)(?:\.(\d{1,3}))?[^\]]*]/g, (match, mm, ss, ms) => {
+        if (typeof ms === 'string') {
+            return `[${mm}:${ss}.${ms}]`;
+        }
+        return `[${mm}:${ss}]`;
+    });
+}
+
+function ml_normalize_lrc_ms(lyrics) {
+    if (!lyrics) return lyrics;
+    return lyrics.replace(/\[(\d{2}):([0-5]\d)(?:\.(\d{1,3}))?]/g, (match, mm, ss, ms) => {
+        if (!ms) return match;
+        const normalizedMs = ms.padEnd(3, '0');
+        return `[${mm}:${ss}.${normalizedMs}]`;
+    });
+}
+
+function ml_resolve_lrc_timestamp_conflicts(lyrics) {
+    if (!lyrics) return lyrics;
+    const lines = lyrics.split('\n');
+    let prevTimestampMs = -1;
+
+    const resolved = lines.map((line) => {
+        const match = line.match(/\[(\d{2}):([0-5]\d)(?:\.(\d{1,3}))?]/);
+        if (!match) return line;
+
+        const minutes = parseInt(match[1], 10);
+        const seconds = parseInt(match[2], 10);
+        const ms = match[3] ? parseInt(match[3].padEnd(3, '0'), 10) : 0;
+        const baseMs = minutes * 60000 + seconds * 1000;
+        let currentMs = baseMs + ms;
+
+        if (currentMs <= prevTimestampMs) {
+            currentMs = Math.min(baseMs + 999, prevTimestampMs + 5);
+        }
+
+        prevTimestampMs = currentMs;
+        const currentOffsetMs = Math.max(0, Math.min(999, currentMs - baseMs));
+        const formatted = `[${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(currentOffsetMs).padStart(3, '0')}]`;
+        return line.replace(/\[(\d{2}):([0-5]\d)(?:\.(\d{1,3}))?]/, formatted);
+    });
+
+    return resolved.join('\n');
+}
+
 function extractLinks(text) {
     var regex = /https?:\/\/\S+/g;
     var matches = text.match(regex);
@@ -399,6 +446,11 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
         const shouldWriteArtist = metadataWriteConfig.enabled && metadataWriteConfig.artist;
         const shouldWriteAlbum = metadataWriteConfig.enabled && metadataWriteConfig.album;
         const shouldWriteLyrics = metadataWriteConfig.enabled && metadataWriteConfig.lyrics;
+
+        if (shouldWriteLyrics && processedLyrics) {
+            processedLyrics = ml_normalize_lrc_ms(processedLyrics);
+            processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
+        }
 
         // 获取文件名模板并生成基础文件名 (不含后缀)
         const filenameTemplate = $('#filename-template').val();
@@ -1002,7 +1054,12 @@ async function ml_download_single_song(song, ml_selected_level) {
 
             let processedLyrics = response.lyric;
             if (response.tlyric) {
-                processedLyrics = lrctran(response.lyric, response.tlyric);
+                processedLyrics = lrctran(
+                    ml_sanitize_lrc_timestamps(response.lyric),
+                    ml_sanitize_lrc_timestamps(response.tlyric)
+                );
+            } else {
+                processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
             }
             await ml_music_download(
                 response.al_name,
