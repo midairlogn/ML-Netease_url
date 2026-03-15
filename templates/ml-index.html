@@ -779,10 +779,63 @@
 
             ap.notice('Waiting for audios to be added', 0, 0.8);
 
+            let ml_prefetch_in_progress = false;
+
+            function ml_sleep(ms) {
+                return new Promise(resolve => setTimeout(resolve, ms));
+            }
+
+            async function ml_prefetch_next_urls(count = 3, ml_beforehand_sleep_time = 1000) {
+                await ml_sleep(ml_beforehand_sleep_time);
+                if (ml_prefetch_in_progress) {
+                    return;
+                }
+                const startIndex = ap.list.index + 1;
+                const endIndex = Math.min(ap.list.audios.length, startIndex + count);
+                if (startIndex >= endIndex) {
+                    return;
+                }
+
+                const targets = ap.list.audios.slice(startIndex, endIndex).filter(song => !song.url && !song._prefetching && !song._retried);
+                if (targets.length === 0) {
+                    return;
+                }
+
+                ml_prefetch_in_progress = true;
+                const level = $('#level').val();
+                const requestUrl = ml_song_info_post_url_base + '/Song_V1';
+
+                try {
+                    for (const song of targets) {
+                        song._prefetching = true;
+                        try {
+                            const response = await $.post(requestUrl, { url: song.id, level: level, type: 'json' });
+                            if (response && response.url) {
+                                song.url = response.url;
+                                if (!song.cover && response.pic) {
+                                    song.cover = response.pic;
+                                }
+                                if (!song.lrc) {
+                                    song.lrc = ml_build_processed_lyrics(response);
+                                }
+                            }
+                        } catch (err) {
+                            console.warn(`预取歌曲 ${song.name || song.id} URL 失败:`, err);
+                        } finally {
+                            song._prefetching = false;
+                        }
+                        await ml_sleep(1000);
+                    }
+                } finally {
+                    ml_prefetch_in_progress = false;
+                }
+            }
+
             // 监听播放事件，用于验证 URL 是否已更新
             ap.on('play', () => {
                 const currentSong = ap.list.audios[ap.list.index];
                 console.log(`🎵 正在播放: ${currentSong.name} | URL: ${currentSong.url}`);
+                ml_prefetch_next_urls(3, 1000);
             });
 
             // 监听加载开始事件
