@@ -785,6 +785,55 @@
                 return new Promise(resolve => setTimeout(resolve, ms));
             }
 
+            function ml_refresh_current_lrc(song) {
+                const currentIndex = ap.list.index;
+                if (ap.list.audios[currentIndex] !== song) {
+                    return;
+                }
+                if (ap.lrc && typeof ap.lrc.switch === 'function') {
+                    ap.lrc.switch(currentIndex);
+                    if (typeof ap.lrc.update === 'function') {
+                        ap.lrc.update(0);
+                    }
+                }
+            }
+
+            async function ml_fetch_song_details(song, { updateAudio = false } = {}) {
+                if (!song || song._fetching) {
+                    return null;
+                }
+                song._fetching = true;
+                const level = $('#level').val();
+                const requestUrl = ml_song_info_post_url_base + '/Song_V1';
+                try {
+                    const response = await $.post(requestUrl, { url: song.id, level: level, type: 'json' });
+                    if (response && response.url) {
+                        song.url = response.url;
+                        if (!song.cover && response.pic) {
+                            song.cover = response.pic;
+                        }
+                        if (!song.lrc) {
+                            song.lrc = ml_build_processed_lyrics(response);
+                            ml_refresh_current_lrc(song);
+                        }
+                        if (updateAudio && ap.list.audios[ap.list.index] === song) {
+                            ap.audio.src = response.url;
+                            ap.audio.load();
+                            ap.audio.onerror = () => ap.emit('error', new Error('Audio error'));
+                            if (ap.audio.paused) {
+                                ap.play();
+                            }
+                        }
+                    }
+                    return response || null;
+                } catch (err) {
+                    console.warn(`获取歌曲 ${song.name || song.id} 详情失败:`, err);
+                    return null;
+                } finally {
+                    song._fetching = false;
+                }
+            }
+
             async function ml_prefetch_next_urls(count = 3, ml_beforehand_sleep_time = 1000) {
                 await ml_sleep(ml_beforehand_sleep_time);
                 if (ml_prefetch_in_progress) {
@@ -796,34 +845,16 @@
                     return;
                 }
 
-                const targets = ap.list.audios.slice(startIndex, endIndex).filter(song => !song.url && !song._prefetching && !song._retried);
+                const targets = ap.list.audios.slice(startIndex, endIndex).filter(song => !song.url && !song._fetching && !song._retried);
                 if (targets.length === 0) {
                     return;
                 }
 
                 ml_prefetch_in_progress = true;
-                const level = $('#level').val();
-                const requestUrl = ml_song_info_post_url_base + '/Song_V1';
 
                 try {
                     for (const song of targets) {
-                        song._prefetching = true;
-                        try {
-                            const response = await $.post(requestUrl, { url: song.id, level: level, type: 'json' });
-                            if (response && response.url) {
-                                song.url = response.url;
-                                if (!song.cover && response.pic) {
-                                    song.cover = response.pic;
-                                }
-                                if (!song.lrc) {
-                                    song.lrc = ml_build_processed_lyrics(response);
-                                }
-                            }
-                        } catch (err) {
-                            console.warn(`预取歌曲 ${song.name || song.id} URL 失败:`, err);
-                        } finally {
-                            song._prefetching = false;
-                        }
+                        await ml_fetch_song_details(song);
                         await ml_sleep(1000);
                     }
                 } finally {
@@ -835,6 +866,9 @@
             ap.on('play', () => {
                 const currentSong = ap.list.audios[ap.list.index];
                 console.log(`🎵 正在播放: ${currentSong.name} | URL: ${currentSong.url}`);
+                if (!currentSong.url) {
+                    ml_fetch_song_details(currentSong, { updateAudio: true });
+                }
                 ml_prefetch_next_urls(3, 1000);
             });
 
@@ -865,6 +899,7 @@
                         }
                         if (!currentSong.lrc) {
                             currentSong.lrc = ml_build_processed_lyrics(response);
+                            ml_refresh_current_lrc(currentSong);
                         }
                         currentSong._retried = true;
                         ap.audio.src = response.url;
