@@ -807,6 +807,12 @@
                     const response = await $.post(ml_song_info_post_url, { url: currentSong.id, level: ml_selected_level, type: 'json' });
                     if (response && response.url) {
                         currentSong.url = response.url;
+                        if (!currentSong.cover && response.pic) {
+                            currentSong.cover = response.pic;
+                        }
+                        if (!currentSong.lrc) {
+                            currentSong.lrc = ml_build_processed_lyrics(response);
+                        }
                         currentSong._retried = true;
                         ap.audio.src = response.url;
                         ap.audio.load();
@@ -1524,6 +1530,23 @@
                 ml_update_action_buttons_state();
             });
 
+            // Helper: Build processed lyrics from response
+            function ml_build_processed_lyrics(response) {
+                if (!response || !response.lyric) {
+                    return '';
+                }
+                let processedLyrics = response.lyric;
+                if (response.tlyric) {
+                    processedLyrics = lrctran(
+                        ml_sanitize_lrc_timestamps(response.lyric),
+                        ml_sanitize_lrc_timestamps(response.tlyric)
+                    );
+                } else {
+                    processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
+                }
+                return ml_resolve_lrc_timestamp_conflicts(processedLyrics);
+            }
+
             async function add_songs_to_aplayer(songs_to_add, ml_selected_level){
                 // 防止重复点击
                 if (ml_play_state.isLoading) {
@@ -1555,6 +1578,7 @@
                     // Filter out duplicates that are already in the playlist
                     const existingIds = new Set(ap.list.audios.map(a => a.id));
                     const newSongs = songs_to_add.filter(s => !existingIds.has(s.id));
+                    const isBatchAdd = newSongs.length > 1;
 
                     if (newSongs.length === 0 && songs_to_add.length > 0) {
                         ap.notice('All selected songs are already in the playlist', 3000, 0.8);
@@ -1567,7 +1591,24 @@
 
                     let addedCount = 0;
 
-                    for(const song of newSongs){
+                    for (const [songIndex, song] of newSongs.entries()) {
+                        if (isBatchAdd && songIndex > 0) {
+                            const songName = song.name || song.song_name || '';
+                            const songArtist = song.artists || song.ar_name || song.artist || '';
+                            const songCover = song.cover || song.picUrl || song.pic || '';
+                            const ml_song_detailed = {
+                                id: song.id,
+                                name: songName,
+                                artist: songArtist,
+                                url: '',
+                                cover: songCover,
+                                lrc: ''
+                            };
+                            ap.list.add(ml_song_detailed);
+                            console.log(`歌曲 ${songName || song.id} 已快速添加到播放列表。`);
+                            addedCount++;
+                            continue;
+                        }
                         let currentTry = 0;
                         let songAdded = false;
                         let response = null;
@@ -1588,16 +1629,7 @@
                             }
                         }
                         if(songAdded && response){
-                            let processedLyrics = response.lyric;
-                            if(response.tlyric){
-                                processedLyrics = lrctran(
-                                    ml_sanitize_lrc_timestamps(response.lyric),
-                                    ml_sanitize_lrc_timestamps(response.tlyric)
-                                );
-                            } else {
-                                processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
-                            }
-                            processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
+                            const processedLyrics = ml_build_processed_lyrics(response);
                             ml_song_detailed = {
                                 id: song.id, // Ensure ID is stored for duplicate checking
                                 name: response.name,
