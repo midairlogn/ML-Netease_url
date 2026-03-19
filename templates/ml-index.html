@@ -842,11 +842,15 @@
                 }
             }
 
-            async function ml_prefetch_next_urls(count = 3, ml_beforehand_sleep_time = 1000) {
+            async function ml_prefetch_next_urls(count = 3, ml_beforehand_sleep_time = 10000) {
                 const currentGen = ++ml_prefetch_generation;
 
+                // Wait for the user to "settle" on a song before starting prefetch
                 await ml_sleep(ml_beforehand_sleep_time);
-                if (currentGen !== ml_prefetch_generation) return;
+                if (currentGen !== ml_prefetch_generation) {
+                    console.log(`[Prefetch] Generation ${currentGen} superseded during initial sleep.`);
+                    return;
+                }
 
                 const startIndex = ap.list.index + 1;
                 const endIndex = Math.min(ap.list.audios.length, startIndex + count);
@@ -855,12 +859,29 @@
                 }
 
                 const targets = ap.list.audios.slice(startIndex, endIndex);
+                console.log(`[Prefetch] Gen ${currentGen} starting for songs:`, targets.map(s => `${s.name} (${s.id})`));
 
                 for (const song of targets) {
-                    if (currentGen !== ml_prefetch_generation) return;
+                    // Check before starting a fetch
+                    if (currentGen !== ml_prefetch_generation) {
+                        console.log(`[Prefetch] Gen ${currentGen} aborted before fetching ${song.name} (${song.id}).`);
+                        return;
+                    }
+
                     if (!song.url && !song._fetching && !song._retried) {
+                        console.log(`[Prefetch] Gen ${currentGen} fetching details for: ${song.name} (${song.id})`);
                         await ml_fetch_song_details(song);
-                        await ml_sleep(1000);
+
+                        // Optimization: Check again immediately after fetch completes
+                        if (currentGen !== ml_prefetch_generation) {
+                            console.log(`[Prefetch] Gen ${currentGen} finished ${song.name} (${song.id}) but now superseded. Stopping.`);
+                            return;
+                        }
+
+                        // Short delay between individual song fetches in the same batch
+                        await ml_sleep(5000);
+                    } else {
+                        console.log(`[Prefetch] Gen ${currentGen} skipping ${song.name} (${song.id}) (already has URL or fetching).`);
                     }
                 }
             }
@@ -872,7 +893,7 @@
                 if (!currentSong.url) {
                     ml_fetch_song_details(currentSong, { updateAudio: true });
                 }
-                ml_prefetch_next_urls(3, 1000);
+                ml_prefetch_next_urls(3, 10000);
             });
 
             // 监听加载开始事件
