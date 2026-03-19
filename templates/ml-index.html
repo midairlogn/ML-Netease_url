@@ -779,7 +779,7 @@
 
             ap.notice('Waiting for audios to be added', 0, 0.8);
 
-            let ml_prefetch_in_progress = false;
+            let ml_prefetch_generation = 0;
 
             function ml_sleep(ms) {
                 return new Promise(resolve => setTimeout(resolve, ms));
@@ -790,10 +790,18 @@
                 if (ap.list.audios[currentIndex] !== song) {
                     return;
                 }
-                if (ap.lrc && typeof ap.lrc.switch === 'function') {
-                    ap.lrc.switch(currentIndex);
-                    if (typeof ap.lrc.update === 'function') {
-                        ap.lrc.update(0);
+
+                // Force APlayer to refresh its lyric cache
+                ap.list.audios[currentIndex].lrc = song.lrc;
+                if (ap.lrc) {
+                    if (ap.lrc.parsed && ap.lrc.parsed[currentIndex]) {
+                        delete ap.lrc.parsed[currentIndex];
+                    }
+                    if (typeof ap.lrc.switch === 'function') {
+                        ap.lrc.switch(currentIndex);
+                        if (typeof ap.lrc.update === 'function') {
+                            ap.lrc.update(ap.audio.currentTime || 0);
+                        }
                     }
                 }
             }
@@ -812,7 +820,7 @@
                         if (!song.cover && response.pic) {
                             song.cover = response.pic;
                         }
-                        if (!song.lrc) {
+                        if (!song.lrc || song.lrc === '[00:00.000]Lyrics not available') {
                             song.lrc = ml_build_processed_lyrics(response);
                             ml_refresh_current_lrc(song);
                         }
@@ -835,30 +843,25 @@
             }
 
             async function ml_prefetch_next_urls(count = 3, ml_beforehand_sleep_time = 1000) {
+                const currentGen = ++ml_prefetch_generation;
+
                 await ml_sleep(ml_beforehand_sleep_time);
-                if (ml_prefetch_in_progress) {
-                    return;
-                }
+                if (currentGen !== ml_prefetch_generation) return;
+
                 const startIndex = ap.list.index + 1;
                 const endIndex = Math.min(ap.list.audios.length, startIndex + count);
                 if (startIndex >= endIndex) {
                     return;
                 }
 
-                const targets = ap.list.audios.slice(startIndex, endIndex).filter(song => !song.url && !song._fetching && !song._retried);
-                if (targets.length === 0) {
-                    return;
-                }
+                const targets = ap.list.audios.slice(startIndex, endIndex);
 
-                ml_prefetch_in_progress = true;
-
-                try {
-                    for (const song of targets) {
+                for (const song of targets) {
+                    if (currentGen !== ml_prefetch_generation) return;
+                    if (!song.url && !song._fetching && !song._retried) {
                         await ml_fetch_song_details(song);
                         await ml_sleep(1000);
                     }
-                } finally {
-                    ml_prefetch_in_progress = false;
                 }
             }
 
@@ -889,15 +892,15 @@
                     document.querySelector('.aplayer-notice').textContent = 'Trying to fetch audio.';
                     document.querySelector('.aplayer-notice').style.opacity = '0.8';
                     ap.audio.onerror = null;
-                    ml_song_info_post_url = ml_song_info_post_url_base + '/Song_V1';
-                    ml_selected_level = $('#level').val();
+                    const ml_song_info_post_url = ml_song_info_post_url_base + '/Song_V1';
+                    const ml_selected_level = $('#level').val();
                     const response = await $.post(ml_song_info_post_url, { url: currentSong.id, level: ml_selected_level, type: 'json' });
                     if (response && response.url) {
                         currentSong.url = response.url;
                         if (!currentSong.cover && response.pic) {
                             currentSong.cover = response.pic;
                         }
-                        if (!currentSong.lrc) {
+                        if (!currentSong.lrc || currentSong.lrc === '[00:00.000]Lyrics not available') {
                             currentSong.lrc = ml_build_processed_lyrics(response);
                             ml_refresh_current_lrc(currentSong);
                         }
@@ -1621,7 +1624,7 @@
             // Helper: Build processed lyrics from response
             function ml_build_processed_lyrics(response) {
                 if (!response || !response.lyric) {
-                    return '';
+                    return '[00:00.000]Lyrics not available';
                 }
                 let processedLyrics = response.lyric;
                 if (response.tlyric) {
@@ -1690,7 +1693,7 @@
                                 artist: songArtist,
                                 url: '',
                                 cover: songCover,
-                                lrc: ''
+                                lrc: '[00:00.000]Lyrics not available'
                             };
                             ap.list.add(ml_song_detailed);
                             console.log(`歌曲 ${songName || song.id} 已快速添加到播放列表。`);
@@ -1718,7 +1721,7 @@
                         }
                         if(songAdded && response){
                             const processedLyrics = ml_build_processed_lyrics(response);
-                            ml_song_detailed = {
+                            const ml_song_detailed = {
                                 id: song.id, // Ensure ID is stored for duplicate checking
                                 name: response.name,
                                 artist: response.ar_name,
