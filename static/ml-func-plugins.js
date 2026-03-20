@@ -2,11 +2,93 @@
 
 var ml_song_info_post_url_base = '';
 
+function ml_preprocess_lrc(lyrics) {
+    if (!lyrics) return lyrics;
+
+    const normalizeTimestamp = (ts) => {
+        // Robustly match minutes, seconds, and optional milliseconds
+        // Handles separators : or .
+        // Handles one or two digit minutes
+        // Handles trailing noise inside brackets (e.g., [mm:ss:xx-1])
+        const match = ts.match(/\[(\d{1,2})[:.](\d{1,2})(?:[:.](\d{1,3}))?.*\]/);
+        if (!match) return ts;
+
+        const mm = match[1].padStart(2, '0');
+        const ss = match[2].padStart(2, '0');
+        // Standardize to 3 digits for consistent matching
+        let ms = (match[3] || '000').padEnd(3, '0').substring(0, 3);
+
+        return `[${mm}:${ss}.${ms}]`;
+    };
+
+    const lines = lyrics.split('\n');
+    const processed = [];
+
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+
+        // Match all leading timestamps. Example: [00:01.00][00:02:00]Text
+        // Updated regex to handle : as separator for milliseconds as well
+        const tsMatch = trimmed.match(/^((?:\s*\[\d{1,2}[:.]\d{1,2}(?:[:.]\d{1,3})?.*\])+)(.*)$/);
+
+        if (tsMatch) {
+            const allTs = tsMatch[1];
+            const content = tsMatch[2].trim();
+
+            // Extract each timestamp
+            const individualTs = allTs.match(/\[\d{1,2}[:.]\d{1,2}(?:[:.]\d{1,3})?.*?\]/g);
+            if (individualTs) {
+                individualTs.forEach(ts => {
+                    processed.push({
+                        timeStr: normalizeTimestamp(ts),
+                        content: content,
+                        isMetadata: false
+                    });
+                });
+            }
+        } else {
+            // Check for metadata [key:value]
+            if (trimmed.startsWith('[') && trimmed.includes(':') && !trimmed.match(/^\[\d/)) {
+                processed.push({
+                    timeStr: trimmed,
+                    content: '',
+                    isMetadata: true
+                });
+            } else {
+                // Keep other lines (garbage or lyrics without timestamps)
+                processed.push({
+                    timeStr: '',
+                    content: trimmed,
+                    isMetadata: false
+                });
+            }
+        }
+    });
+
+    // Sort: Metadata first, then by time
+    processed.sort((a, b) => {
+        if (a.isMetadata && !b.isMetadata) return -1;
+        if (!a.isMetadata && b.isMetadata) return 1;
+        if (a.isMetadata && b.isMetadata) return 0;
+        if (!a.timeStr && b.timeStr) return 1;
+        if (a.timeStr && !b.timeStr) return -1;
+
+        // Canonical format [mm:ss.ms]
+        return a.timeStr.localeCompare(b.timeStr);
+    });
+
+    return processed.map(p => p.timeStr + p.content).join('\n');
+}
+
 function lrctrim(lyrics) {
+    // Ensure lyrics are preprocessed before trimming
+    lyrics = ml_preprocess_lrc(lyrics);
     const lines = lyrics.split('\n');
     const data = [];
 
     lines.forEach((line, index) => {
+        // Support both [mm:ss.ms] and [mm:ss]
         const matches = line.match(/\[(\d{2}):([0-5]\d(?:\.\d{1,3})?)]/);
         if (matches) {
             const minutes = parseInt(matches[1], 10);
@@ -26,6 +108,8 @@ function lrctrim(lyrics) {
 }
 
 function lrctran(lyric, tlyric) {
+    // Both inputs are already sanitized/preprocessed by callers (templates/ml-index.html)
+    // but we can call it here again to be safe and ensure matching works on canonical timestamps.
     lyric = lrctrim(lyric);
     tlyric = lrctrim(tlyric);
 
@@ -33,6 +117,7 @@ function lrctran(lyric, tlyric) {
     let len2 = tlyric.length;
     let result = "";
 
+    // Matching is done on milliseconds (lyric[i][0]) which is robust after normalization
     for (let i = 0, j = 0; i < len1 && j < len2; i++) {
         while (lyric[i][0] > tlyric[j][0] && j + 1 < len2) {
             j++;
@@ -49,6 +134,7 @@ function lrctran(lyric, tlyric) {
 
     for (let i = 0; i < len1; i++) {
         let t = lyric[i][0];
+        // Use standard canonical format [mm:ss.ms] for final output
         result += `[${String(Math.floor(t / 60000)).padStart(2, '0')}:${String(Math.floor((t % 60000) / 1000)).padStart(2, '0')}.${String(t % 1000).padStart(3, '0')}]${lyric[i][2]}\n`;
     }
 
@@ -57,12 +143,8 @@ function lrctran(lyric, tlyric) {
 
 function ml_sanitize_lrc_timestamps(lyrics) {
     if (!lyrics) return lyrics;
-    return lyrics.replace(/\[(\d{2}):([0-5]\d)(?:\.(\d{1,3}))?[^\]]*]/g, (match, mm, ss, ms) => {
-        if (typeof ms === 'string') {
-            return `[${mm}:${ss}.${ms}]`;
-        }
-        return `[${mm}:${ss}]`;
-    });
+    // Preprocess lyrics to handle various timestamp formats and multi-timestamp lines
+    return ml_preprocess_lrc(lyrics);
 }
 
 function ml_normalize_lrc_ms(lyrics) {
