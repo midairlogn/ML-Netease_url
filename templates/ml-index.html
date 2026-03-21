@@ -1154,24 +1154,13 @@
                         } else {
                             $('#search-list').html('<li class="list-group-item">未找到相关歌曲</li>');
                             $('#search-result').addClass('d-none');
-                            const errorMsg = data.status !== 200 ? data.msg : '未找到相关歌曲';
-                            ml_show_toast({
-                                type: 'error',
-                                title: '搜索失败',
-                                subtitle: errorMsg,
-                                cover: ''
-                            });
+                            ml_show_error_toast(data, '搜索失败', '未找到相关歌曲');
                         }
                     },
                     error: function() {
                         $('#search-list').html('<li class="list-group-item">搜索失败，请重试</li>');
                         $('#search-result').addClass('d-none');
-                        ml_show_toast({
-                            type: 'error',
-                            title: '搜索失败',
-                            subtitle: '网络请求错误，请重试',
-                            cover: ''
-                        });
+                        ml_show_error_toast(null, '搜索失败', '网络请求错误，请重试');
                     },
                     complete: function() {
                         // 恢复按钮状态
@@ -1299,22 +1288,11 @@
                         });
                     } else {
                         $('#song-info').addClass('d-none');
-                        const errorMsg = data.status !== 200 ? data.msg : '未找到相关歌曲信息';
-                        ml_show_toast({
-                            type: 'error',
-                            title: '解析失败',
-                            subtitle: errorMsg,
-                            cover: ''
-                        });
+                        ml_show_error_toast(data, '解析失败', '未找到相关歌曲信息');
                     }
                 }, 'json').fail(function() {
                     $('#song-info').addClass('d-none');
-                    ml_show_toast({
-                        type: 'error',
-                        title: '解析失败',
-                        subtitle: '网络请求错误，请重试',
-                        cover: ''
-                    });
+                    ml_show_error_toast(null, '解析失败', '网络请求错误，请重试');
                 }).always(function() {
                     // 恢复按钮状态
                     ml_set_button_state('#parse-btn', false);
@@ -1438,22 +1416,11 @@
                         });
                     } else {
                         $('#playlist-result').addClass('d-none');
-                        const errorMsg = data.status !== 200 ? data.msg : '未找到相关歌单信息或歌单为空';
-                        ml_show_toast({
-                            type: 'error',
-                            title: '解析失败',
-                            subtitle: errorMsg,
-                            cover: ''
-                        });
+                        ml_show_error_toast(data, '解析失败', '未找到相关歌单信息或歌单为空');
                     }
                 }, 'json').fail(function() {
                     $('#playlist-result').addClass('d-none');
-                    ml_show_toast({
-                        type: 'error',
-                        title: '解析失败',
-                        subtitle: '网络请求错误，请重试',
-                        cover: ''
-                    });
+                    ml_show_error_toast(null, '解析失败', '网络请求错误，请重试');
                 }).always(function() {
                     // 恢复按钮状态
                     ml_set_button_state('#playlist-btn', false);
@@ -1570,22 +1537,11 @@
                         });
                     } else {
                         $('#album-result').addClass('d-none');
-                        const errorMsg = data.status !== 200 ? data.msg : '未找到相关专辑信息';
-                        ml_show_toast({
-                            type: 'error',
-                            title: '解析失败',
-                            subtitle: errorMsg,
-                            cover: ''
-                        });
+                        ml_show_error_toast(data, '解析失败', '未找到相关专辑信息');
                     }
                 }, 'json').fail(function() {
                     $('#album-result').addClass('d-none');
-                    ml_show_toast({
-                        type: 'error',
-                        title: '解析失败',
-                        subtitle: '网络请求错误，请重试',
-                        cover: ''
-                    });
+                    ml_show_error_toast(null, '解析失败', '网络请求错误，请重试');
                 }).always(function() {
                     // 恢复按钮状态
                     ml_set_button_state('#album-btn', false);

@@ -274,11 +274,16 @@ async function ml_execute_single_task(task) {
             task.completedCount = 1;
             task.progress = 100;
         } else {
+            ml_show_error_toast(response, '解析失败', '无法获取歌曲信息');
             throw new Error(response.msg || 'Failed to get song info');
         }
     } catch (error) {
         task.failedCount = 1;
         task.failedSongs = [song];
+        // If it was a network error and not already handled by ml_show_error_toast
+        if (error instanceof TypeError || error.name === 'AbortError') {
+             ml_show_error_toast(error, '解析失败', '网络请求错误');
+        }
         throw error;
     }
 }
@@ -1154,6 +1159,27 @@ function ml_show_task_cancelled_toast(task) {
             `已取消 (${task.successCount}/${task.totalCount} 已完成)` :
             '下载已取消',
         cover: task.cover
+    });
+}
+
+/**
+ * 显示错误通知
+ * 优先显示 error.msg，否则使用默认提示
+ */
+function ml_show_error_toast(error, defaultTitle, defaultSubtitle) {
+    let subtitle = defaultSubtitle;
+
+    if (error && error.msg) {
+        subtitle = error.msg;
+    } else if (typeof error === 'string') {
+        subtitle = error;
+    }
+
+    ml_show_toast({
+        type: 'error',
+        title: defaultTitle || '处理失败',
+        subtitle: subtitle,
+        cover: ''
     });
 }
 
