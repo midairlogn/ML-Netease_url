@@ -807,7 +807,11 @@
             }
 
             async function ml_fetch_song_details(song, { updateAudio = false } = {}) {
-                if (!song || song._fetching) {
+                if (!song) return null;
+                if (song._fetching) {
+                    if (updateAudio) {
+                        song._needsUpdateAudio = true;
+                    }
                     return null;
                 }
                 song._fetching = true;
@@ -845,7 +849,7 @@
                         song.lrc = ml_build_processed_lyrics(response);
                         ml_refresh_current_lrc(song);
                     }
-                    if (updateAudio && ap.list.audios[ap.list.index] === song) {
+                    if ((updateAudio || song._needsUpdateAudio) && ap.list.audios[ap.list.index] === song) {
                         ap.audio.src = response.url;
                         ap.audio.load();
                         ap.audio.onerror = () => ap.emit('error', new Error('Audio error'));
@@ -853,7 +857,7 @@
                             ap.play();
                         }
                     }
-                } else if (updateAudio) {
+                } else if (updateAudio || song._needsUpdateAudio) {
                     console.error(`歌曲 ${song.name || song.id} 达到最大重试次数仍无法播放，正在从播放列表移除并切换...`);
 
                     ml_show_toast({
@@ -869,6 +873,7 @@
                 }
 
                 song._fetching = false;
+                delete song._needsUpdateAudio;
                 return response || null;
             }
 
@@ -948,7 +953,6 @@
                     ap.audio.onerror = null;
 
                     // 重置状态并使用带重试逻辑的 fetch 函数
-                    currentSong._fetching = false;
                     const response = await ml_fetch_song_details(currentSong, { updateAudio: true });
 
                     if (response && response.url) {
@@ -1738,6 +1742,11 @@
                             console.log(`歌曲 ${song.name} 已成功添加到播放列表。`);
                         } else {
                             console.warn(`歌曲 ${song.name} 达到最大重试次数 (${ml_max_try_times + 1} 次) 仍未成功，已跳过。`);
+                            ml_show_toast({
+                                type: 'error',
+                                title: '添加失败',
+                                subtitle: `无法获取歌曲 "${song.name || song.id}" 的详情。`
+                            });
                         }
                     }
                     console.log(ap.list);
