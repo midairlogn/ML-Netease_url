@@ -813,33 +813,63 @@
                 song._fetching = true;
                 const level = $('#level').val();
                 const requestUrl = ml_song_info_post_url_base + '/Song_V1';
-                try {
-                    const response = await $.post(requestUrl, { url: song.id, level: level, type: 'json' });
-                    if (response && response.url) {
-                        song.url = response.url;
-                        if (!song.cover && response.pic) {
-                            song.cover = response.pic;
+
+                let currentTry = 0;
+                let success = false;
+                let response = null;
+                const maxTries = (typeof ml_max_try_times !== 'undefined') ? ml_max_try_times + 1 : 5;
+
+                while (currentTry < maxTries && !success) {
+                    try {
+                        response = await $.post(requestUrl, { url: song.id, level: level, type: 'json' });
+                        if (response && response.url) {
+                            success = true;
+                        } else {
+                            console.warn(`获取歌曲 ${song.name || song.id} 详情失败 (第 ${currentTry + 1} 次尝试): ${response ? response.msg : '未知错误'}`);
+                            currentTry++;
+                            if (currentTry < maxTries) await ml_sleep(5000);
                         }
-                        if (!song.lrc || song.lrc === '[00:00.000]Lyrics not available') {
-                            song.lrc = ml_build_processed_lyrics(response);
-                            ml_refresh_current_lrc(song);
-                        }
-                        if (updateAudio && ap.list.audios[ap.list.index] === song) {
-                            ap.audio.src = response.url;
-                            ap.audio.load();
-                            ap.audio.onerror = () => ap.emit('error', new Error('Audio error'));
-                            if (ap.audio.paused) {
-                                ap.play();
-                            }
+                    } catch (err) {
+                        console.warn(`获取歌曲 ${song.name || song.id} 详情失败 (第 ${currentTry + 1} 次尝试):`, err);
+                        currentTry++;
+                        if (currentTry < maxTries) await ml_sleep(5000);
+                    }
+                }
+
+                if (success && response) {
+                    song.url = response.url;
+                    if (!song.cover && response.pic) {
+                        song.cover = response.pic;
+                    }
+                    if (!song.lrc || song.lrc === '[00:00.000]Lyrics not available') {
+                        song.lrc = ml_build_processed_lyrics(response);
+                        ml_refresh_current_lrc(song);
+                    }
+                    if (updateAudio && ap.list.audios[ap.list.index] === song) {
+                        ap.audio.src = response.url;
+                        ap.audio.load();
+                        ap.audio.onerror = () => ap.emit('error', new Error('Audio error'));
+                        if (ap.audio.paused) {
+                            ap.play();
                         }
                     }
-                    return response || null;
-                } catch (err) {
-                    console.warn(`获取歌曲 ${song.name || song.id} 详情失败:`, err);
-                    return null;
-                } finally {
-                    song._fetching = false;
+                } else if (updateAudio) {
+                    console.error(`歌曲 ${song.name || song.id} 达到最大重试次数仍无法播放，正在从播放列表移除并切换...`);
+
+                    ml_show_toast({
+                        type: 'error',
+                        title: '播放失败',
+                        subtitle: `歌曲 "${song.name}" 无法获取播放链接，已自动移除。`
+                    });
+
+                    const songIndex = ap.list.audios.indexOf(song);
+                    if (songIndex !== -1) {
+                        ap.list.remove(songIndex);
+                    }
                 }
+
+                song._fetching = false;
+                return response || null;
             }
 
             async function ml_prefetch_next_urls(count = 3, ml_beforehand_sleep_time = 10000) {
@@ -907,38 +937,35 @@
             ap.on('error', async (e) => {
                 const index = ap.list.index;
                 const currentSong = ap.list.audios[index];
+
+                if (!currentSong) return;
+
                 if (!currentSong._retried) {
                     console.log(`❌ 播放错误: ${currentSong.name}，尝试刷新 URL 并重试...\n`, e);
                     ap.pause();
                     document.querySelector('.aplayer-notice').textContent = 'Trying to fetch audio.';
                     document.querySelector('.aplayer-notice').style.opacity = '0.8';
                     ap.audio.onerror = null;
-                    const ml_song_info_post_url = ml_song_info_post_url_base + '/Song_V1';
-                    const ml_selected_level = $('#level').val();
-                    const response = await $.post(ml_song_info_post_url, { url: currentSong.id, level: ml_selected_level, type: 'json' });
+
+                    // 重置状态并使用带重试逻辑的 fetch 函数
+                    currentSong._fetching = false;
+                    const response = await ml_fetch_song_details(currentSong, { updateAudio: true });
+
                     if (response && response.url) {
-                        currentSong.url = response.url;
-                        if (!currentSong.cover && response.pic) {
-                            currentSong.cover = response.pic;
-                        }
-                        if (!currentSong.lrc || currentSong.lrc === '[00:00.000]Lyrics not available') {
-                            currentSong.lrc = ml_build_processed_lyrics(response);
-                            ml_refresh_current_lrc(currentSong);
-                        }
                         currentSong._retried = true;
-                        ap.audio.src = response.url;
-                        ap.audio.load();
-                        ap.audio.onerror = () => ap.emit('error', new Error('Audio error'));
                         document.querySelector('.aplayer-notice').style.opacity = '0';
-                        // ap.skipBack();
-                        // ap.skipForward();
-                        ap.play();
-                        // console.log(ap.list);
                     } else {
-                        console.error('获取新 URL 失败，无法播放该歌曲。');
+                        // ml_fetch_song_details 已处理移除逻辑
+                        document.querySelector('.aplayer-notice').style.opacity = '0';
                     }
                 } else {
-                    console.error('已尝试刷新 URL，但仍无法播放。');
+                    console.error(`已尝试刷新 URL，但歌曲 ${currentSong.name} 仍无法播放，正在移除...`);
+                    ml_show_toast({
+                        type: 'error',
+                        title: '播放失败',
+                        subtitle: `歌曲 "${currentSong.name}" 刷新链接后仍无法播放，已自动移除。`
+                    });
+                    ap.list.remove(index);
                 }
             });
 
