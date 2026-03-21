@@ -88,6 +88,8 @@ def Song_v1():
         song_name = song_info.get('name', '')
         song_picUrl = song_info.get('al', {}).get('picUrl', '')
         song_alname = song_info.get('al', {}).get('name', '')
+        if not song_name and not song_picUrl and not song_alname:
+            return jsonify({"status": 400, 'msg': '信息获取不完整！'}), 400
         # 歌手名拼接
         artist_names = []
         for song in namev1['songs']:
