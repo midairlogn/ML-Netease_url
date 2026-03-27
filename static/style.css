@@ -212,6 +212,8 @@ h1 {
 
 .list-group-item:last-child {
     border-bottom: none;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
 }
 
 .list-group-item:hover {
