@@ -101,7 +101,12 @@
                             <div class="mb-3">
                                 <label for="search_keywords" class="form-label">搜索关键词</label>
                                 <div class="input-group">
-                                    <input type="text" id="search_keywords" class="form-control" placeholder="输入关键词进行搜索">
+                                    <input type="text" id="search_keywords" class="form-control border-end-0" placeholder="输入关键词进行搜索">
+                                    <button type="button" class="btn btn-outline-secondary bg-white text-muted border-start-0 border-end-0 px-3 ml-input-clear-btn" id="clear-search_keywords" data-target="#search_keywords" title="清空" aria-label="清空搜索关键词">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x-lg" viewBox="0 0 16 16">
+                                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                                        </svg>
+                                    </button>
                                     <button type="button" id="search-btn" class="btn btn-success">搜索</button>
                                 </div>
                             </div>
@@ -113,7 +118,12 @@
                             <div class="mb-3">
                                 <label for="song_ids" class="form-label">歌曲ID或URL</label>
                                 <div class="input-group">
-                                    <input type="text" id="song_ids" class="form-control" placeholder="输入歌曲ID或URL">
+                                    <input type="text" id="song_ids" class="form-control border-end-0" placeholder="输入歌曲ID或URL">
+                                    <button type="button" class="btn btn-outline-secondary bg-white text-muted border-start-0 border-end-0 px-3 ml-input-clear-btn" id="clear-song_ids" data-target="#song_ids" title="清空" aria-label="清空歌曲ID或URL">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x-lg" viewBox="0 0 16 16">
+                                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                                        </svg>
+                                    </button>
                                     <button type="button" id="parse-btn" class="btn btn-primary">解析</button>
                                 </div>
                             </div>
@@ -125,7 +135,12 @@
                             <div class="mb-3">
                                 <label for="playlist_id" class="form-label">歌单ID或链接</label>
                                 <div class="input-group">
-                                    <input type="text" id="playlist_id" class="form-control" placeholder="输入歌单ID或网易云歌单链接">
+                                    <input type="text" id="playlist_id" class="form-control border-end-0" placeholder="输入歌单ID或网易云歌单链接">
+                                    <button type="button" class="btn btn-outline-secondary bg-white text-muted border-start-0 border-end-0 px-3 ml-input-clear-btn" id="clear-playlist_id" data-target="#playlist_id" title="清空" aria-label="清空歌单ID或链接">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x-lg" viewBox="0 0 16 16">
+                                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                                        </svg>
+                                    </button>
                                     <button type="button" id="playlist-btn" class="btn btn-warning">解析歌单</button>
                                 </div>
                             </div>
@@ -137,7 +152,12 @@
                             <div class="mb-3">
                                 <label for="album_id" class="form-label">专辑ID或链接</label>
                                 <div class="input-group">
-                                    <input type="text" id="album_id" class="form-control" placeholder="输入专辑ID或网易云专辑链接">
+                                    <input type="text" id="album_id" class="form-control border-end-0" placeholder="输入专辑ID或网易云专辑链接">
+                                    <button type="button" class="btn btn-outline-secondary bg-white text-muted border-start-0 border-end-0 px-3 ml-input-clear-btn" id="clear-album_id" data-target="#album_id" title="清空" aria-label="清空专辑ID或链接">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-x-lg" viewBox="0 0 16 16">
+                                            <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z"/>
+                                        </svg>
+                                    </button>
                                     <button type="button" id="album-btn" class="btn btn-info">解析专辑</button>
                                 </div>
                             </div>
@@ -737,6 +757,10 @@
 
                 // Immediate show on focus
                 $input.on('focus', function() {
+                    if ($input.data('skipNextFocusHistory')) {
+                        $input.removeData('skipNextFocusHistory');
+                        return;
+                    }
                     ml_show_history(config.id, config.type);
                 });
 
@@ -1091,6 +1115,38 @@
             $('#search_keywords, #song_ids, #playlist_id, #album_id').on('blur', function() {
                 let val = $(this).val().trim().replace(/^["']+|["']+$/g, '');
                 $(this).val(val);
+            });
+
+            // 按 Esc 清空当前输入框
+            $('#search_keywords, #song_ids, #playlist_id, #album_id').on('keydown', function(e) {
+                if (e.key !== 'Escape') {
+                    return;
+                }
+
+                $(this).data('skipNextFocusHistory', true);
+                $(this).closest('.input-group').find('.ml-history-dropdown').remove();
+                $(this).val('');
+                $(this).trigger('input');
+                e.preventDefault();
+            });
+
+            // 输入框清空按钮逻辑
+            $('.ml-input-clear-btn').on('mousedown', function(e) {
+                e.preventDefault();
+            });
+
+            $('.ml-input-clear-btn').on('click', function() {
+                const targetSelector = $(this).data('target');
+                const $input = $(targetSelector);
+                if ($input.length === 0) {
+                    return;
+                }
+
+                $input.data('skipNextFocusHistory', true);
+                $input.closest('.input-group').find('.ml-history-dropdown').remove();
+                $input.val('');
+                $input.trigger('input');
+                $input.focus();
             });
 
             // 搜索功能
