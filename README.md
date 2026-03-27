@@ -113,6 +113,10 @@ python main.py --mode api
 - Cookie 格式请严格按照 `cookie.txt.example` 示例填写。
 - 浏览器控制台(console)有详细输出，可以供调试、开发使用。
 
+## 免责声明
+
+本工具仅供学习交流使用，请支持正版音乐。使用本工具时请遵守相关法律法规，尊重音乐人的劳动成果。
+
 ## 许可证
 
 [GNU General Public License v3.0](LICENSE)
