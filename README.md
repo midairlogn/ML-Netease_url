@@ -47,7 +47,7 @@ cp .env.example .env
 2. 修改 `.env` 文件，填入你的 `MUSIC_U` 值（黑胶会员账号 Cookie 中的 `MUSIC_U` 部分）：
 
 ```
-MUSIC_U=your_music_u_value_here
+MUSIC_U=[your_music_u_value_here]
 ```
 
 > 关于 `MUSIC_U` 的获取，请参考 [获取 `MUSIC_U` 的方法](MUSIC_U/get-MUSIC_U.md).
@@ -56,7 +56,7 @@ MUSIC_U=your_music_u_value_here
 
 关键配置项：
 
-- `MUSIC_U`：黑胶会员账号的 MUSIC_U 值
+- `MUSIC_U`：网易云黑胶会员账号的 MUSIC_U 值
 - `APP_HOST` / `APP_PORT`：应用监听地址和端口
 - `ALLOWED_ORIGIN` / `ALLOWED_ORIGINS`：跨域白名单
 
@@ -68,7 +68,7 @@ MUSIC_U=your_music_u_value_here
 python main.py --mode gui --url <网易云音乐地址> --level <音质参数>
 ```
 
-#### API 模式
+#### API 模式（开发版）
 
 默认端口为`6969`。
 
@@ -76,9 +76,9 @@ python main.py --mode gui --url <网易云音乐地址> --level <音质参数>
 python main.py --mode api
 ```
 
-在 windows 平台上可以直接去 `Release` 里面下载便携版，解压，按照要求加上 `cookie.txt` 文件，运行 `ml-launch-api.bat` 启动。
+在 windows 平台上可以直接去 `Release` 里面下载便携版，解压，按照上面步骤创建 `.env` 文件，运行 `ml-launch-api.bat` 即可一键启动。
 
-### 4. Linux 生产部署（Gunicorn + Nginx + systemd）
+### 4. Linux 生产部署（Gunicorn + Nginx + systemd，可选）
 
 项目已提供基础生产部署工件：
 
@@ -162,7 +162,7 @@ sudo systemctl reload nginx
 - API `/Search`、`/Song_V1`、`/Playlist`、`/Album` 是否正常
 - 确保 `MUSIC_U` 已正确配置
 
-- 访问接口：http://ip:port/类型解析
+- 访问接口：`http://ip:port/类型解析`
 - 支持 GET 和 POST 请求
 
 ## 参数说明
@@ -205,8 +205,8 @@ sudo systemctl reload nginx
 
 ## 注意事项
 
-- 必须使用黑胶会员账号的 Cookie 才能解析高音质资源。
-- Cookie 格式请严格按照 `cookie.txt.example` 示例填写。
+- 必须使用黑胶会员账号的 MUSIC_U 才能解析高音质资源。
+- 请将 MUSIC_U 正确填入 `.env` 以保证正常解析。
 - 浏览器控制台(console)有详细输出，可以供调试、开发使用。
 
 ## 免责声明
