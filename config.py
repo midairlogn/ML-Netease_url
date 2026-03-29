@@ -41,7 +41,7 @@ class AppConfig:
     URL = os.getenv('URL')
 
     # 网易云模拟参数
-    OS = os.getenv('OS', 'pc')
+    OS = os.getenv('NETEASE_OS', 'pc')
     APPVER = os.getenv('APPVER', '8.9.75')
     OSVER = os.getenv('OSVER', '')
     DEVICE_ID = os.getenv('DEVICE_ID', 'pyncm!')
