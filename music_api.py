@@ -1,3 +1,4 @@
+import logging
 import json
 import urllib.parse
 from random import randrange
@@ -7,6 +8,10 @@ from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 from config import settings
+
+# 配置日志输出
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 def HexDigest(data):
     return "".join([hex(d)[2:].zfill(2) for d in data])
@@ -79,12 +84,15 @@ def url_v1(id, level, cookies):
     enc = encryptor.update(padded_data) + encryptor.finalize()
     params = HexDigest(enc)
     response = post(url, params, cookies)
-    return json.loads(response)
+    result = json.loads(response)
+    logger.info(f"歌曲播放地址解析成功, ID: {id}")
+    return result
 
 def name_v1(id):
     urls = "https://interface3.music.163.com/api/v3/song/detail"
     data = {'c': json.dumps([{"id":id,"v":0}])}
     response = requests.post(url=urls, data=data)
+    logger.info(f"歌曲详细信息解析成功, ID: {id}")
     return response.json()
 
 def lyric_v1(id, cookies):
@@ -109,6 +117,7 @@ def search_music(keywords, cookies, limit=10):
     }
     response = requests.post(url, data=data, headers=headers, cookies=cookies)
     result = response.json()
+    logger.info(f"搜索歌曲成功, 关键词: {keywords}, 找到歌曲数: {len(result.get('result', {}).get('songs', []))}")
     songs = []
     for item in result.get('result', {}).get('songs', []):
         song_info = {
@@ -137,6 +146,7 @@ def playlist_detail(playlist_id, cookies):
     response = requests.post(url, data=data, headers=headers, cookies=cookies)
     result = response.json()
     playlist = result.get('playlist', {})
+    logger.info(f"歌单({playlist.get('name')}, ID: {playlist_id})解析成功, 歌曲数: {len(result.get('playlist', {}).get('trackIds', []))}")
     info = {
         'id': playlist.get('id'),
         'name': playlist.get('name'),
@@ -180,6 +190,7 @@ def album_detail(album_id, cookies):
     response = requests.get(url, headers=headers, cookies=cookies)
     result = response.json()
     album = result.get('album', {})
+    logger.info(f"专辑({album.get('name')}, ID: {album_id})解析成功, 歌曲数: {len(result.get('songs', []))}")
     info = {
         'id': album.get('id'),
         'name': album.get('name'),
