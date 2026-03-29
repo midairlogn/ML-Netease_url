@@ -1,16 +1,16 @@
-import os
 from typing import Dict
 
+from config import settings
+
+
 class CookieManager:
-    def __init__(self, cookie_file: str = None):
-        if cookie_file is None:
-            script_dir = os.path.dirname(os.path.abspath(__file__))
-            cookie_file = os.path.join(script_dir, 'cookie.txt')
-        self.cookie_file = cookie_file
+    def __init__(self, music_u: str = None):
+        if music_u is None:
+            music_u = settings.MUSIC_U
+        self.music_u = music_u.strip()
 
     def read_cookie(self) -> str:
-        with open(self.cookie_file, 'r', encoding='utf-8') as f:
-            return f.read()
+        return f'MUSIC_U={self.music_u};'
 
     @staticmethod
     def parse_cookie(text: str) -> Dict[str, str]:

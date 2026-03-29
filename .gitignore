@@ -1,8 +1,11 @@
-cookie.txt
-__pycache__
-.vs
-.vscode
-python-3.12.4-embed-amd64
+.env
+ml-netease-url.env
+__pycache__/
+*.pyc
+.venv/
+.vs/
+.vscode/
+python-3.12.4-embed-amd64/
 ml-launch-api.bat
 ml-get-MUSIC_U.bat
-windows-portable-release
+windows-portable-release/

@@ -1,0 +1,21 @@
+[Unit]
+Description=ML Netease URL Gunicorn service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/ml-netease-url
+EnvironmentFile=/etc/ml-netease-url.env
+ExecStart=/opt/ml-netease-url/.venv/bin/gunicorn -c /opt/ml-netease-url/deploy/gunicorn.conf.py wsgi:app
+Restart=always
+RestartSec=5
+KillSignal=SIGQUIT
+TimeoutStopSec=30
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

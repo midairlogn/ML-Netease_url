@@ -36,17 +36,29 @@
 pip install -r requirements.txt
 ```
 
-### 2. 配置 Cookie
+### 2. 配置环境变量
 
-请在 `cookie.txt` 文件中填入黑胶会员账号的 Cookie，格式如下：
+1. 复制示例环境变量文件：
+
+```bash
+cp .env.example .env
+```
+
+2. 修改 `.env` 文件，填入你的 `MUSIC_U` 值（黑胶会员账号 Cookie 中的 `MUSIC_U` 部分）：
 
 ```
-MUSIC_U=`YOUR MUSIC_U`;os=pc;appver=8.9.75;
+MUSIC_U=your_music_u_value_here
 ```
-
-> 请参考 `cookie.txt.example` 示例，把`YOUR MUSIC_U`替换为你自己的即可（不保留``）。
 
 > 关于 `MUSIC_U` 的获取，请参考 [获取 `MUSIC_U` 的方法](MUSIC_U/get-MUSIC_U.md).
+
+3. 如有需要，修改 `.env` 中的其他配置项。
+
+关键配置项：
+
+- `MUSIC_U`：黑胶会员账号的 MUSIC_U 值
+- `APP_HOST` / `APP_PORT`：应用监听地址和端口
+- `ALLOWED_ORIGIN` / `ALLOWED_ORIGINS`：跨域白名单
 
 ### 3. 运行
 
@@ -65,6 +77,77 @@ python main.py --mode api
 ```
 
 在 windows 平台上可以直接去 `Release` 里面下载便携版，解压，按照要求加上 `cookie.txt` 文件，运行 `ml-launch-api.bat` 启动。
+
+### 4. Linux 生产部署（Gunicorn + Nginx + systemd）
+
+项目已提供基础生产部署工件：
+
+- `wsgi.py`：Gunicorn 入口
+- `deploy/gunicorn.conf.py`：Gunicorn 配置
+- `deploy/ml-netease-url.service`：systemd service 示例
+- `deploy/nginx.conf`：Nginx 反向代理示例
+- `deploy/.env.example`：Linux 环境变量示例
+
+#### 环境变量
+
+推荐在 Linux 服务器上通过 systemd 的 `EnvironmentFile` 注入配置，例如：
+
+```bash
+cp deploy/.env.example /etc/ml-netease-url.env
+```
+
+关键配置项：
+
+- `MUSIC_U`：黑胶会员账号的 MUSIC_U 值
+- `APP_HOST` / `APP_PORT`：应用监听地址和端口
+- `LOG_LEVEL`：日志级别，例如 `INFO`
+- `ALLOWED_ORIGIN` / `ALLOWED_ORIGINS`：跨域白名单
+- `GUNICORN_BIND` / `GUNICORN_WORKERS`：Gunicorn 绑定地址和 worker 配置
+
+#### 启动 Gunicorn
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+gunicorn -c deploy/gunicorn.conf.py wsgi:app
+```
+
+默认建议由 Gunicorn 监听 `127.0.0.1:6969`，再由 Nginx 对外提供访问。
+
+#### systemd 部署
+
+将 `deploy/ml-netease-url.service` 安装到系统目录后执行：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now ml-netease-url
+sudo systemctl status ml-netease-url
+```
+
+查看日志：
+
+```bash
+journalctl -u ml-netease-url -n 200
+```
+
+#### Nginx 部署
+
+将 `deploy/nginx.conf` 放入站点配置目录后检查并重载：
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+#### 验证
+
+部署完成后可验证：
+
+- 首页 `/` 是否可正常访问
+- 健康检查 `/health` 是否返回 `200`
+- API `/Search`、`/Song_V1`、`/Playlist`、`/Album` 是否正常
+- 确保 `MUSIC_U` 已正确配置
 
 - 访问接口：http://ip:port/类型解析
 - 支持 GET 和 POST 请求
