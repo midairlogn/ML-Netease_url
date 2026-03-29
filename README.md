@@ -117,7 +117,20 @@ gunicorn -c deploy/gunicorn.conf.py wsgi:app
 
 #### systemd 部署
 
-将 `deploy/ml-netease-url.service` 安装到系统目录后执行：
+将 `deploy/ml-netease-url.service` 安装到系统目录：
+
+```bash
+sudo cp deploy/ml-netease-url.service /etc/systemd/system/
+sudo chmod 644 /etc/systemd/system/ml-netease-url.service
+```
+
+修改`service`中的相关路径：
+
+```bash
+sudo nano /etc/systemd/system/ml-netease-url.service
+```
+
+之后执行：
 
 ```bash
 sudo systemctl daemon-reload
