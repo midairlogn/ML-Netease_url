@@ -669,8 +669,8 @@
                                 return;
                             }
 
-                            // If the button in the same input group is disabled, ignore the click
-                            const $btn = $inputGroup.find('button');
+                            // If the main action button in the same input group is disabled, ignore the click
+                            const $btn = $inputGroup.find('button').not('.ml-input-clear-btn');
                             if ($btn.prop('disabled')) {
                                 return;
                             }
@@ -693,8 +693,8 @@
 
                             $input.val(item.id || item.name);
 
-                            // Auto trigger search/parse
-                            $inputGroup.find('button').click();
+                            // Auto trigger search/parse (using the specific action button, not the clear button)
+                            $btn.click();
                         });
 
                         $dropdown.append($item);
@@ -1062,7 +1062,7 @@
                     e.preventDefault();
                     // 隐藏联想下拉菜单
                     $('.ml-history-dropdown').remove();
-                    const $btn = $(this).closest('.input-group').find('button');
+                    const $btn = $(this).closest('.input-group').find('button').not('.ml-input-clear-btn');
                     // 检查按钮是否已被禁用（正在解析中）
                     if (!$btn.prop('disabled')) {
                         $btn.click();
@@ -1131,11 +1131,10 @@
             });
 
             // 输入框清空按钮逻辑
-            $('.ml-input-clear-btn').on('mousedown', function(e) {
+            $('.ml-input-clear-btn').on('click', function(e) {
                 e.preventDefault();
-            });
+                e.stopPropagation();
 
-            $('.ml-input-clear-btn').on('click', function() {
                 const targetSelector = $(this).data('target');
                 const $input = $(targetSelector);
                 if ($input.length === 0) {
