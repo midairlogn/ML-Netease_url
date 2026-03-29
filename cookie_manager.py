@@ -10,7 +10,7 @@ class CookieManager:
         self.music_u = music_u.strip()
 
     def read_cookie(self) -> str:
-        return f'MUSIC_U={self.music_u};'
+        return f'MUSIC_U={self.music_u};os={settings.OS};appver={settings.APPVER};deviceId={settings.DEVICE_ID};'
 
     @staticmethod
     def parse_cookie(text: str) -> Dict[str, str]:

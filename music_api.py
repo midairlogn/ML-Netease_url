@@ -6,6 +6,8 @@ from hashlib import md5
 from cryptography.hazmat.primitives import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
+from config import settings
+
 def HexDigest(data):
     return "".join([hex(d)[2:].zfill(2) for d in data])
 
@@ -22,10 +24,10 @@ def post(url, params, cookie):
         'Referer': '',
     }
     cookies = {
-        "os": "pc",
-        "appver": "",
-        "osver": "",
-        "deviceId": "pyncm!"
+        "os": settings.OS,
+        "appver": settings.APPVER,
+        "osver": settings.OSVER,
+        "deviceId": settings.DEVICE_ID
     }
     cookies.update(cookie)
     response = requests.post(url, headers=headers, cookies=cookies, data={"params": params})
@@ -37,10 +39,10 @@ def posts(url, params, cookie):
         'Referer': '',
     }
     cookies = {
-        "os": "pc",
-        "appver": "",
-        "osver": "",
-        "deviceId": "pyncm!"
+        "os": settings.OS,
+        "appver": settings.APPVER,
+        "osver": settings.OSVER,
+        "deviceId": settings.DEVICE_ID
     }
     cookies.update(cookie)
     response = requests.post(url, headers=headers, cookies=cookies, data={"params": params})
@@ -50,10 +52,10 @@ def url_v1(id, level, cookies):
     url = "https://interface3.music.163.com/eapi/song/enhance/player/url/v1"
     AES_KEY = b"e82ckenh8dichen8"
     config = {
-        "os": "pc",
-        "appver": "",
-        "osver": "",
-        "deviceId": "pyncm!",
+        "os": settings.OS,
+        "appver": settings.APPVER,
+        "osver": settings.OSVER,
+        "deviceId": settings.DEVICE_ID,
         "requestId": str(randrange(20000000, 30000000))
     }
 
@@ -235,10 +237,10 @@ def generate_qr_key():
     url = 'https://interface3.music.163.com/eapi/login/qrcode/unikey'
     AES_KEY = b"e82ckenh8dichen8"
     config = {
-        "os": "pc",
-        "appver": "",
-        "osver": "",
-        "deviceId": "pyncm!",
+        "os": settings.OS,
+        "appver": settings.APPVER,
+        "osver": settings.OSVER,
+        "deviceId": settings.DEVICE_ID,
         "requestId": str(randrange(20000000, 30000000))
     }
 
@@ -296,10 +298,10 @@ def check_qr_login(unikey):
     url = 'https://interface3.music.163.com/eapi/login/qrcode/client/login'
     AES_KEY = b"e82ckenh8dichen8"
     config = {
-        "os": "pc",
-        "appver": "",
-        "osver": "",
-        "deviceId": "pyncm!",
+        "os": settings.OS,
+        "appver": settings.APPVER,
+        "osver": settings.OSVER,
+        "deviceId": settings.DEVICE_ID,
         "requestId": str(randrange(20000000, 30000000))
     }
 
@@ -349,7 +351,7 @@ def qr_login():
         code, cookies = check_qr_login(unikey)
         if code == 803:
             print("\n登录成功！")
-            return 'MUSIC_U=' + cookies['MUSIC_U'] + ';os=pc;appver=8.9.75;'  # 修复字符串拼接
+            return f"MUSIC_U={cookies['MUSIC_U']};os={settings.OS};appver={settings.APPVER};deviceId={settings.DEVICE_ID};"
         elif code == 801:
             print("\r等待扫码...", end='')
         elif code == 802:

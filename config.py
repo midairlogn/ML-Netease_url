@@ -40,6 +40,12 @@ class AppConfig:
     LEVEL = os.getenv('LEVEL', 'lossless')
     URL = os.getenv('URL')
 
+    # 网易云模拟参数
+    OS = os.getenv('OS', 'pc')
+    APPVER = os.getenv('APPVER', '8.9.75')
+    OSVER = os.getenv('OSVER', '')
+    DEVICE_ID = os.getenv('DEVICE_ID', 'pyncm!')
+
     @property
     def cors_origins(self) -> list[str]:
         if self.ALLOWED_ORIGINS:
