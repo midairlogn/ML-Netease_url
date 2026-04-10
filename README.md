@@ -84,7 +84,7 @@ python main.py --mode api
 
 - `wsgi.py`：Gunicorn 入口
 - `deploy/gunicorn.conf.py`：Gunicorn 配置
-- `deploy/ml-netease-url.service`：systemd service 示例
+- `deploy/ML-Netease_url.service`：systemd service 示例
 - `deploy/nginx.conf`：Nginx 反向代理示例
 - `deploy/.env.example`：Linux 环境变量示例
 
@@ -93,7 +93,7 @@ python main.py --mode api
 推荐在 Linux 服务器上通过 systemd 的 `EnvironmentFile` 注入配置，例如：
 
 ```bash
-cp deploy/.env.example /etc/ml-netease-url.env
+cp deploy/.env.example /etc/ML-Netease_url.env
 ```
 
 关键配置项：
@@ -117,31 +117,31 @@ gunicorn -c deploy/gunicorn.conf.py wsgi:app
 
 #### systemd 部署
 
-将 `deploy/ml-netease-url.service` 安装到系统目录：
+将 `deploy/ML-Netease_url.service` 安装到系统目录：
 
 ```bash
-sudo cp deploy/ml-netease-url.service /etc/systemd/system/
-sudo chmod 644 /etc/systemd/system/ml-netease-url.service
+sudo cp deploy/ML-Netease_url.service /etc/systemd/system/
+sudo chmod 644 /etc/systemd/system/ML-Netease_url.service
 ```
 
 修改`service`中的相关路径：
 
 ```bash
-sudo nano /etc/systemd/system/ml-netease-url.service
+sudo nano /etc/systemd/system/ML-Netease_url.service
 ```
 
 之后执行：
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now ml-netease-url
-sudo systemctl status ml-netease-url
+sudo systemctl enable --now ML-Netease_url
+sudo systemctl status ML-Netease_url
 ```
 
 查看日志：
 
 ```bash
-journalctl -u ml-netease-url -n 200
+journalctl -u ML-Netease_url -n 200
 ```
 
 #### Nginx 部署
