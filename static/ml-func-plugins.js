@@ -509,7 +509,7 @@ $(document).ready(function() {
 // ---------------------------------------------------------
 
 // 定义下载函数
-async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null) {
+async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null) {
     try {
         // 获取音质级别
         const audioLevel = level || getCurrentLevel();
@@ -521,12 +521,14 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             cover: (localStorage.getItem('ml_metadata_write_cover') ?? 'true') === 'true',
             artist: (localStorage.getItem('ml_metadata_write_artist') ?? 'true') === 'true',
             album: (localStorage.getItem('ml_metadata_write_album') ?? 'true') === 'true',
+            track: (localStorage.getItem('ml_metadata_write_track') ?? 'true') === 'true',
             lyrics: (localStorage.getItem('ml_metadata_write_lyrics') ?? 'true') === 'true'
         };
 
         const shouldWriteCover = metadataWriteConfig.enabled && metadataWriteConfig.cover;
         const shouldWriteArtist = metadataWriteConfig.enabled && metadataWriteConfig.artist;
         const shouldWriteAlbum = metadataWriteConfig.enabled && metadataWriteConfig.album;
+        const shouldWriteTrack = metadataWriteConfig.enabled && metadataWriteConfig.track && trackNumber;
         const shouldWriteLyrics = metadataWriteConfig.enabled && metadataWriteConfig.lyrics;
 
         if (shouldWriteLyrics && processedLyrics) {
@@ -599,6 +601,10 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                 writer.setFrame('TALB', al_name);  // 专辑
             }
 
+            if (shouldWriteTrack) {
+                writer.setFrame('TRCK', totalTracks ? `${trackNumber}/${totalTracks}` : String(trackNumber));
+            }
+
             // 歌词
             if (shouldWriteLyrics && processedLyrics) {
                 writer.setFrame('USLT', {
@@ -646,6 +652,10 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                     writer.setFrame('TALB', al_name);
                 }
 
+                if (shouldWriteTrack) {
+                    writer.setFrame('TRCK', totalTracks ? `${trackNumber}/${totalTracks}` : String(trackNumber));
+                }
+
                 if (shouldWriteLyrics && processedLyrics) {
                     writer.setFrame('USLT', {
                         language: 'und',
@@ -680,6 +690,13 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
 
                 if (shouldWriteAlbum) {
                     writer.setFrame('ALBUM', al_name);
+                }
+
+                if (shouldWriteTrack) {
+                    writer.setFrame('TRACKNUMBER', trackNumber);
+                    if (totalTracks) {
+                        writer.setFrame('TRACKTOTAL', totalTracks);
+                    }
                 }
 
                 // 歌词
@@ -1150,7 +1167,9 @@ async function ml_download_single_song(song, ml_selected_level) {
                 response.name,
                 response.pic,
                 response.url,
-                ml_selected_level
+                ml_selected_level,
+                song.trackNumber,
+                song.totalTracks
             );
             return { success: true, song: song, infoFetched: true };
         } else {

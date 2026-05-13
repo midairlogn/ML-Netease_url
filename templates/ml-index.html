@@ -458,6 +458,10 @@
                                         <label class="form-check-label" for="metadata-write-album">专辑</label>
                                     </div>
                                     <div class="form-check mb-0">
+                                        <input class="form-check-input" type="checkbox" id="metadata-write-track">
+                                        <label class="form-check-label" for="metadata-write-track">曲目编号</label>
+                                    </div>
+                                    <div class="form-check mb-0">
                                         <input class="form-check-input" type="checkbox" id="metadata-write-lyrics">
                                         <label class="form-check-label" for="metadata-write-lyrics">歌词</label>
                                     </div>
@@ -1472,7 +1476,11 @@
                                 </div>
                                 <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">详情</button>
                             </li>`;
-                            ml_song_list.push(song);
+                            ml_song_list.push({
+                                ...song,
+                                trackNumber: idx + 1,
+                                totalTracks: pl.tracks.length
+                            });
                             $('#playlist-tracks').append(item);
                         });
                         $('#playlist-result').removeClass('d-none');
@@ -1593,7 +1601,11 @@
                                 </div>
                                 <button class="btn btn-sm btn-outline-primary select-song" data-id="${song.id}" data-name="${song.name}">详情</button>
                             </li>`;
-                            ml_song_list.push(song);
+                            ml_song_list.push({
+                                ...song,
+                                trackNumber: idx + 1,
+                                totalTracks: al.songs.length
+                            });
                             $('#album-tracks').append(item);
                         });
                         $('#album-result').removeClass('d-none');
@@ -1838,6 +1850,7 @@
             const DEFAULT_METADATA_WRITE_COVER = "true";
             const DEFAULT_METADATA_WRITE_ARTIST = "true";
             const DEFAULT_METADATA_WRITE_ALBUM = "true";
+            const DEFAULT_METADATA_WRITE_TRACK = "true";
             const DEFAULT_METADATA_WRITE_LYRICS = "true";
 
             function ml_get_or_init_bool_setting(key, defaultValue) {
@@ -1854,12 +1867,13 @@
                 localStorage.setItem('ml_metadata_write_cover', $('#metadata-write-cover').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_artist', $('#metadata-write-artist').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_album', $('#metadata-write-album').is(':checked') ? 'true' : 'false');
+                localStorage.setItem('ml_metadata_write_track', $('#metadata-write-track').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_lyrics', $('#metadata-write-lyrics').is(':checked') ? 'true' : 'false');
             }
 
             function ml_update_metadata_write_ui_state() {
                 const enabled = $('#metadata-write-enabled').is(':checked');
-                $('#metadata-write-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-lyrics').prop('disabled', !enabled);
+                $('#metadata-write-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-track, #metadata-write-lyrics').prop('disabled', !enabled);
             }
 
             function ml_update_metadata_write_preview() {
@@ -1873,6 +1887,7 @@
                 if ($('#metadata-write-cover').is(':checked')) selectedItems.push('封面');
                 if ($('#metadata-write-artist').is(':checked')) selectedItems.push('歌手');
                 if ($('#metadata-write-album').is(':checked')) selectedItems.push('专辑');
+                if ($('#metadata-write-track').is(':checked')) selectedItems.push('曲目编号');
                 if ($('#metadata-write-lyrics').is(':checked')) selectedItems.push('歌词');
 
                 if (selectedItems.length === 0) {
@@ -1935,12 +1950,14 @@
             const savedMetadataWriteCover = ml_get_or_init_bool_setting('ml_metadata_write_cover', DEFAULT_METADATA_WRITE_COVER);
             const savedMetadataWriteArtist = ml_get_or_init_bool_setting('ml_metadata_write_artist', DEFAULT_METADATA_WRITE_ARTIST);
             const savedMetadataWriteAlbum = ml_get_or_init_bool_setting('ml_metadata_write_album', DEFAULT_METADATA_WRITE_ALBUM);
+            const savedMetadataWriteTrack = ml_get_or_init_bool_setting('ml_metadata_write_track', DEFAULT_METADATA_WRITE_TRACK);
             const savedMetadataWriteLyrics = ml_get_or_init_bool_setting('ml_metadata_write_lyrics', DEFAULT_METADATA_WRITE_LYRICS);
 
             $('#metadata-write-enabled').prop('checked', savedMetadataWriteEnabled);
             $('#metadata-write-cover').prop('checked', savedMetadataWriteCover);
             $('#metadata-write-artist').prop('checked', savedMetadataWriteArtist);
             $('#metadata-write-album').prop('checked', savedMetadataWriteAlbum);
+            $('#metadata-write-track').prop('checked', savedMetadataWriteTrack);
             $('#metadata-write-lyrics').prop('checked', savedMetadataWriteLyrics);
             ml_update_metadata_write_ui_state();
             ml_update_metadata_write_preview();
@@ -2006,7 +2023,7 @@
                 ml_update_metadata_write_preview();
             });
 
-            $('#metadata-write-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-lyrics').on('change', function() {
+            $('#metadata-write-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-track, #metadata-write-lyrics').on('change', function() {
                 ml_save_metadata_write_settings();
                 ml_update_metadata_write_preview();
             });
@@ -2024,6 +2041,7 @@
                         localStorage.setItem('ml_metadata_write_cover', DEFAULT_METADATA_WRITE_COVER);
                         localStorage.setItem('ml_metadata_write_artist', DEFAULT_METADATA_WRITE_ARTIST);
                         localStorage.setItem('ml_metadata_write_album', DEFAULT_METADATA_WRITE_ALBUM);
+                        localStorage.setItem('ml_metadata_write_track', DEFAULT_METADATA_WRITE_TRACK);
                         localStorage.setItem('ml_metadata_write_lyrics', DEFAULT_METADATA_WRITE_LYRICS);
 
                         // Update UI
@@ -2036,6 +2054,7 @@
                         $('#metadata-write-cover').prop('checked', DEFAULT_METADATA_WRITE_COVER === 'true');
                         $('#metadata-write-artist').prop('checked', DEFAULT_METADATA_WRITE_ARTIST === 'true');
                         $('#metadata-write-album').prop('checked', DEFAULT_METADATA_WRITE_ALBUM === 'true');
+                        $('#metadata-write-track').prop('checked', DEFAULT_METADATA_WRITE_TRACK === 'true');
                         $('#metadata-write-lyrics').prop('checked', DEFAULT_METADATA_WRITE_LYRICS === 'true');
                         ml_update_metadata_write_ui_state();
                         ml_update_metadata_write_preview();

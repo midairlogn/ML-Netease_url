@@ -267,7 +267,9 @@ async function ml_execute_single_task(task) {
                 response.name,
                 response.pic,
                 response.url,
-                task.level
+                task.level,
+                song.trackNumber,
+                song.totalTracks
             );
 
             task.successCount = 1;
@@ -354,7 +356,9 @@ async function ml_execute_batch_task(task) {
                             response.name,
                             response.pic,
                             response.url,
-                            task.level
+                            task.level,
+                            song.trackNumber,
+                            song.totalTracks
                         );
 
                         return { success: true, song: song };
