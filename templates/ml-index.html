@@ -1263,7 +1263,10 @@
             // 搜索结果点击解析
             $(document).on('click', '.select-song', function() {
                 const songId = $(this).data('id');
+                const sourceSong = ml_song_list.find(song => String(song.id) === String(songId));
                 $('#song_ids').val(songId);
+                $('#song_ids').data('track-number', sourceSong?.trackNumber || null);
+                $('#song_ids').data('total-tracks', sourceSong?.totalTracks || null);
 
                 // Explicitly hide all result containers immediately to ensure clean transition
                 $('#search-result, #song-info, #playlist-result, #album-result').addClass('d-none');
@@ -1285,6 +1288,9 @@
                 // 自动去除前后空格和引号
                 let songIds = $('#song_ids').val().trim().replace(/^["']+|["']+$/g, '');
                 $('#song_ids').val(songIds);
+                const trackNumber = $('#song_ids').data('track-number') || null;
+                const totalTracks = $('#song_ids').data('total-tracks') || null;
+                $('#song_ids').removeData('track-number total-tracks');
 
                 const level = $('#level').val();
                 ml_get_song_info_real_url = ml_song_info_post_url_base + '/Song_V1';
@@ -1373,7 +1379,9 @@
                                 al_name: data.al_name,
                                 pic: data.pic,
                                 picUrl: data.pic,
-                                artists: data.ar_name
+                                artists: data.ar_name,
+                                trackNumber: trackNumber,
+                                totalTracks: totalTracks
                             };
                             ml_add_single_song_task(songData, level);
                         });
