@@ -525,10 +525,16 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             lyrics: (localStorage.getItem('ml_metadata_write_lyrics') ?? 'true') === 'true'
         };
 
+        const normalizedTrackNumber = trackNumber !== null && trackNumber !== undefined && String(trackNumber).trim() !== ''
+            ? String(trackNumber).trim()
+            : null;
+        const normalizedTotalTracks = totalTracks !== null && totalTracks !== undefined && String(totalTracks).trim() !== ''
+            ? String(totalTracks).trim()
+            : null;
         const shouldWriteCover = metadataWriteConfig.enabled && metadataWriteConfig.cover;
         const shouldWriteArtist = metadataWriteConfig.enabled && metadataWriteConfig.artist;
         const shouldWriteAlbum = metadataWriteConfig.enabled && metadataWriteConfig.album;
-        const shouldWriteTrack = metadataWriteConfig.enabled && metadataWriteConfig.track && trackNumber;
+        const shouldWriteTrack = metadataWriteConfig.enabled && metadataWriteConfig.track && normalizedTrackNumber;
         const shouldWriteLyrics = metadataWriteConfig.enabled && metadataWriteConfig.lyrics;
 
         if (shouldWriteLyrics && processedLyrics) {
@@ -602,7 +608,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             }
 
             if (shouldWriteTrack) {
-                writer.setFrame('TRCK', totalTracks ? `${trackNumber}/${totalTracks}` : String(trackNumber));
+                writer.setFrame('TRCK', normalizedTotalTracks ? `${normalizedTrackNumber}/${normalizedTotalTracks}` : normalizedTrackNumber);
             }
 
             // 歌词
@@ -653,7 +659,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                 }
 
                 if (shouldWriteTrack) {
-                    writer.setFrame('TRCK', totalTracks ? `${trackNumber}/${totalTracks}` : String(trackNumber));
+                    writer.setFrame('TRCK', normalizedTotalTracks ? `${normalizedTrackNumber}/${normalizedTotalTracks}` : normalizedTrackNumber);
                 }
 
                 if (shouldWriteLyrics && processedLyrics) {
@@ -693,10 +699,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                 }
 
                 if (shouldWriteTrack) {
-                    writer.setFrame('TRACKNUMBER', trackNumber);
-                    if (totalTracks) {
-                        writer.setFrame('TRACKTOTAL', totalTracks);
-                    }
+                    writer.setFrame('TRACKNUMBER', normalizedTotalTracks ? `${normalizedTrackNumber}/${normalizedTotalTracks}` : normalizedTrackNumber);
                 }
 
                 // 歌词
