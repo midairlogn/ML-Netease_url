@@ -55,4 +55,6 @@ class AppConfig:
         return []
 
 
+    VERSION = '1.1.7'
+
 settings = AppConfig()

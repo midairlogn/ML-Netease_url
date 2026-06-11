@@ -84,7 +84,8 @@ def after_request(response):
 @app.route('/', methods=['GET', 'POST'])
 def index():
     logger.debug('Rendering index page')
-    return render_template('ml-index.html')
+    version = getattr(settings, 'VERSION', '0.0.0')
+    return render_template('ml-index.html', version=version)
 
 
 @app.route('/health', methods=['GET'])
