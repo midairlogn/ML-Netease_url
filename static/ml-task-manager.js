@@ -226,24 +226,90 @@ function ml_sanitize_path_segment(value) {
         .substring(0, 120);
 }
 
+function ml_split_file_name(fileName) {
+    const safeInput = String(fileName || '').trim();
+    const dotIndex = safeInput.lastIndexOf('.');
+    if (dotIndex <= 0 || dotIndex === safeInput.length - 1) {
+        return { base: safeInput, ext: '' };
+    }
+    return {
+        base: safeInput.slice(0, dotIndex),
+        ext: safeInput.slice(dotIndex)
+    };
+}
+
+function ml_format_safe_file_name(base, ext, suffix = '') {
+    const safeExt = ml_sanitize_path_segment(ext).substring(0, 16);
+    const maxBaseLength = Math.max(1, 120 - safeExt.length - suffix.length);
+    const safeBase = (ml_sanitize_path_segment(base) || 'music')
+        .substring(0, maxBaseLength)
+        .replace(/[. ]+$/g, '') || 'music';
+    return `${safeBase}${suffix}${safeExt}`;
+}
+
+function ml_sanitize_file_name(fileName) {
+    const parts = ml_split_file_name(fileName);
+    return ml_format_safe_file_name(parts.base, parts.ext);
+}
+
 function ml_get_unique_file_name(fileName, usedFileNames) {
-    const safeName = ml_sanitize_path_segment(fileName) || 'music.mp3';
+    const safeName = ml_sanitize_file_name(fileName) || 'music.mp3';
     if (!usedFileNames.has(safeName)) {
         usedFileNames.add(safeName);
         return safeName;
     }
 
-    const dotIndex = safeName.lastIndexOf('.');
-    const base = dotIndex > 0 ? safeName.slice(0, dotIndex) : safeName;
-    const ext = dotIndex > 0 ? safeName.slice(dotIndex) : '';
+    const { base, ext } = ml_split_file_name(safeName);
     let index = 2;
-    let candidate = `${base} (${index})${ext}`;
+    let candidate = ml_format_safe_file_name(base, ext, ` (${index})`);
     while (usedFileNames.has(candidate)) {
         index++;
-        candidate = `${base} (${index})${ext}`;
+        candidate = ml_format_safe_file_name(base, ext, ` (${index})`);
     }
     usedFileNames.add(candidate);
     return candidate;
+}
+
+async function ml_folder_file_exists(folderHandle, fileName) {
+    try {
+        await folderHandle.getFileHandle(fileName, { create: false });
+        return true;
+    } catch (error) {
+        if (error?.name === 'NotFoundError') return false;
+        if (error?.name === 'TypeMismatchError') return true;
+        throw error;
+    }
+}
+
+async function ml_get_unique_folder_file_name(folderHandle, fileName, usedFileNames) {
+    const safeName = ml_sanitize_file_name(fileName) || 'music.mp3';
+    const { base, ext } = ml_split_file_name(safeName);
+    let index = 1;
+
+    while (true) {
+        const suffix = index === 1 ? '' : ` (${index})`;
+        const candidate = ml_format_safe_file_name(base, ext, suffix);
+
+        if (usedFileNames.has(candidate)) {
+            index++;
+            continue;
+        }
+
+        usedFileNames.add(candidate);
+        let exists;
+        try {
+            exists = await ml_folder_file_exists(folderHandle, candidate);
+        } catch (error) {
+            usedFileNames.delete(candidate);
+            throw error;
+        }
+
+        if (!exists) {
+            return candidate;
+        }
+
+        index++;
+    }
 }
 
 // ===== Task Processing =====
@@ -439,9 +505,8 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
         throw new DOMException('Download cancelled', 'AbortError');
     }
 
-    const fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
-
     if (task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
+        const fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
         task.generatedFiles.push({ fileName: fileName, blob: musicFile.blob });
         return;
     }
@@ -451,6 +516,7 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
             throw new Error('Folder handle is not available');
         }
 
+        const fileName = await ml_get_unique_folder_file_name(task.folderHandle, musicFile.fileName, task.usedFileNames);
         const fileHandle = await task.folderHandle.getFileHandle(fileName, { create: true });
         const writable = await fileHandle.createWritable();
         try {
