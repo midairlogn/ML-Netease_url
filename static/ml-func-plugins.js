@@ -508,8 +508,8 @@ $(document).ready(function() {
 
 // ---------------------------------------------------------
 
-// 定义下载函数
-async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
+// Build a tagged music file without deciding where it should be saved.
+async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
     try {
         if (abortSignal && abortSignal.aborted) {
             throw new DOMException('Download cancelled', 'AbortError');
@@ -734,19 +734,35 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             throw new DOMException('Download cancelled', 'AbortError');
         }
 
-        // 4. 触发下载
-        const blobUrl = URL.createObjectURL(taggedBlob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(blobUrl);
-        console.log(`文件 "${fileName}" 已开始下载。`);
+        return {
+            blob: taggedBlob,
+            fileName: fileName
+        };
 
     } catch (error) {
         console.error("下载或处理音乐文件时发生错误:", error);
+        throw error;
+    }
+};
+
+function ml_trigger_blob_download(blob, fileName) {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
+    console.log(`文件 "${fileName}" 已开始下载。`);
+}
+
+// 定义下载函数
+async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
+    try {
+        const musicFile = await ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level, trackNumber, totalTracks, abortSignal);
+        ml_trigger_blob_download(musicFile.blob, musicFile.fileName);
+    } catch (error) {
         if (error?.name !== 'AbortError') {
             ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');
         }

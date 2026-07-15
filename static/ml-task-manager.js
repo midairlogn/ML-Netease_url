@@ -23,6 +23,12 @@ const ML_TASK_TYPE = {
     BATCH: 'batch'         // Playlist/Album batch download
 };
 
+const ML_COLLECTION_DOWNLOAD_MODE = {
+    INDIVIDUAL: 'individual',
+    ZIP: 'zip',
+    FOLDER: 'folder'
+};
+
 // ===== Settings =====
 // 最大同时进行的任务数固定为1
 const MAX_ACTIVE_TASKS = 1;
@@ -93,6 +99,12 @@ function ml_create_task(options) {
 
         // Download settings
         level: options.level || 'standard',
+        outputMode: options.outputMode || ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL,
+        sourceType: options.sourceType || null,
+        collectionName: options.collectionName || options.title || '',
+        folderHandle: options.folderHandle || null,
+        generatedFiles: [],
+        usedFileNames: new Set(),
 
         // State management
         isPaused: false,
@@ -137,21 +149,101 @@ function ml_add_single_song_task(songData, level) {
 /**
  * Add a batch download task (playlist/album)
  */
-function ml_add_batch_task(songs, title, description, cover, level) {
+async function ml_add_batch_task(songs, title, description, cover, level, options = {}) {
     // If only 1 song, treat as single song task
     if (songs.length === 1) {
         return ml_add_single_song_task(songs[0], level);
     }
 
+    const outputMode = ml_get_collection_download_mode();
+    const defaultName = title || options.collectionId || `${songs.length} songs`;
+    const collectionName = ml_prompt_collection_download_name(defaultName);
+    if (collectionName === null) {
+        return null;
+    }
+
+    let finalOutputMode = outputMode;
+    let folderHandle = null;
+
+    if (finalOutputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER) {
+        if (!window.showDirectoryPicker) {
+            ml_show_Alert('浏览器不支持', '当前浏览器不支持选择文件夹，将改为下载ZIP压缩包。', 'warning');
+            finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+        } else {
+            try {
+                const parentHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+                folderHandle = await parentHandle.getDirectoryHandle(ml_sanitize_path_segment(collectionName), { create: true });
+            } catch (error) {
+                if (error?.name !== 'AbortError') {
+                    ml_show_Alert('文件夹选择失败', '无法访问所选文件夹，请重试或切换为ZIP下载。', 'error');
+                }
+                return null;
+            }
+        }
+    }
+
+    if (finalOutputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && typeof JSZip === 'undefined') {
+        ml_show_Alert('ZIP不可用', 'ZIP组件未加载，将改为单独文件下载。', 'warning');
+        finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+    }
+
     return ml_create_task({
         type: ML_TASK_TYPE.BATCH,
-        title: title || `${songs.length} songs`,
+        title: collectionName,
         subtitle: description || '',
         cover: cover || (songs[0] ? songs[0].picUrl : ''),
         description: description,
         songs: songs,
-        level: level
+        level: level,
+        outputMode: finalOutputMode,
+        sourceType: options.sourceType || null,
+        collectionName: collectionName,
+        folderHandle: folderHandle
     });
+}
+
+function ml_get_collection_download_mode() {
+    const mode = localStorage.getItem('ml_collection_download_mode') || ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+    return Object.values(ML_COLLECTION_DOWNLOAD_MODE).includes(mode) ? mode : ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+}
+
+function ml_prompt_collection_download_name(defaultName) {
+    const fallbackName = defaultName || 'download';
+    const input = window.prompt('请输入多曲下载名称', fallbackName);
+    if (input === null) return null;
+
+    const sanitized = ml_sanitize_path_segment(input.trim() || fallbackName);
+    return sanitized || 'download';
+}
+
+function ml_sanitize_path_segment(value) {
+    return String(value || '')
+        .replace(/[\\/:*?"<>|]/g, '_')
+        .replace(/[\x00-\x1f]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/[. ]+$/g, '')
+        .substring(0, 120);
+}
+
+function ml_get_unique_file_name(fileName, usedFileNames) {
+    const safeName = ml_sanitize_path_segment(fileName) || 'music.mp3';
+    if (!usedFileNames.has(safeName)) {
+        usedFileNames.add(safeName);
+        return safeName;
+    }
+
+    const dotIndex = safeName.lastIndexOf('.');
+    const base = dotIndex > 0 ? safeName.slice(0, dotIndex) : safeName;
+    const ext = dotIndex > 0 ? safeName.slice(dotIndex) : '';
+    let index = 2;
+    let candidate = `${base} (${index})${ext}`;
+    while (usedFileNames.has(candidate)) {
+        index++;
+        candidate = `${base} (${index})${ext}`;
+    }
+    usedFileNames.add(candidate);
+    return candidate;
 }
 
 // ===== Task Processing =====
@@ -313,6 +405,86 @@ async function ml_execute_single_task(task) {
     }
 }
 
+async function ml_save_task_music_file(task, response, processedLyrics, song) {
+    if (task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL) {
+        await ml_music_download(
+            response.al_name,
+            response.ar_name,
+            processedLyrics,
+            response.name,
+            response.pic,
+            response.url,
+            task.level,
+            song.trackNumber,
+            song.totalTracks,
+            task.abortController ? task.abortController.signal : undefined
+        );
+        return;
+    }
+
+    const musicFile = await ml_build_music_file(
+        response.al_name,
+        response.ar_name,
+        processedLyrics,
+        response.name,
+        response.pic,
+        response.url,
+        task.level,
+        song.trackNumber,
+        song.totalTracks,
+        task.abortController ? task.abortController.signal : undefined
+    );
+
+    if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
+        throw new DOMException('Download cancelled', 'AbortError');
+    }
+
+    const fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
+
+    if (task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
+        task.generatedFiles.push({ fileName: fileName, blob: musicFile.blob });
+        return;
+    }
+
+    if (task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER) {
+        if (!task.folderHandle) {
+            throw new Error('Folder handle is not available');
+        }
+
+        const fileHandle = await task.folderHandle.getFileHandle(fileName, { create: true });
+        const writable = await fileHandle.createWritable();
+        try {
+            await writable.write(musicFile.blob);
+        } finally {
+            await writable.close();
+        }
+    }
+}
+
+async function ml_finish_zip_task(task) {
+    if (task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.ZIP || task.generatedFiles.length === 0) {
+        return;
+    }
+    if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
+        return;
+    }
+    if (typeof JSZip === 'undefined') {
+        throw new Error('JSZip is not available');
+    }
+
+    const zip = new JSZip();
+    task.generatedFiles.forEach(file => {
+        zip.file(file.fileName, file.blob);
+    });
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
+        return;
+    }
+
+    ml_trigger_blob_download(zipBlob, `${ml_sanitize_path_segment(task.collectionName || task.title || 'download')}.zip`);
+}
+
 /**
  * Execute a batch download task
  */
@@ -356,18 +528,7 @@ async function ml_execute_batch_task(task) {
                     }
                     processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
 
-                    await ml_music_download(
-                        response.al_name,
-                        response.ar_name,
-                        processedLyrics,
-                        response.name,
-                        response.pic,
-                        response.url,
-                        task.level,
-                        song.trackNumber,
-                        song.totalTracks,
-                        task.abortController ? task.abortController.signal : undefined
-                    );
+                    await ml_save_task_music_file(task, response, processedLyrics, song);
 
                     if (task.status === ML_TASK_STATUS.CANCELLED) {
                         return;
@@ -395,7 +556,10 @@ async function ml_execute_batch_task(task) {
         const workers = Array.from({ length: workerCount }, () => downloadNextSong());
         await Promise.all(workers);
 
-        if (task.status === ML_TASK_STATUS.CANCELLED) break;
+        if (task.status === ML_TASK_STATUS.CANCELLED) {
+            task.generatedFiles = [];
+            break;
+        }
 
         if (task.isPaused || task.status === ML_TASK_STATUS.PAUSED) {
             task.status = ML_TASK_STATUS.PAUSED;
@@ -416,6 +580,10 @@ async function ml_execute_batch_task(task) {
 
     task.failedSongs = songQueue;
     task.remainingSongs = [];
+
+    if (task.status === ML_TASK_STATUS.ACTIVE) {
+        await ml_finish_zip_task(task);
+    }
 }
 
 // ===== Task Control =====

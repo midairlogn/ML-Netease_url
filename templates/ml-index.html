@@ -318,7 +318,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <div class="row mb-3">
-                            <div class="col-md-6">
+                            <div class="col-md-3">
                                 <label for="level" class="form-label">音质选择</label>
                                 <select id="level" class="form-select">
                                     <option value="standard">标准音质</option>
@@ -337,6 +337,14 @@
                             <div class="col-md-3">
                                 <label for="concurrent-downloads" class="form-label">最大同时下载数</label>
                                 <input type="number" id="concurrent-downloads" class="form-control" value="3" min="1" max="10">
+                            </div>
+                            <div class="col-md-3">
+                                <label for="collection-download-mode" class="form-label">多曲下载方式</label>
+                                <select id="collection-download-mode" class="form-select">
+                                    <option value="individual">单独文件</option>
+                                    <option value="zip">ZIP压缩包</option>
+                                    <option value="folder">指定文件夹</option>
+                                </select>
                             </div>
                             <!-- 最大任务数设置已注释
                             <div class="col-md-3">
@@ -517,6 +525,7 @@
     <!-- <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/aplayer/1.10.1/APlayer.min.js"></script> -->
     <script src="{{ url_for('static', filename='ml-APlayer.min.js') }}"></script>
     <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/twitter-bootstrap/5.1.3/js/bootstrap.bundle.min.js"></script>
+    <script src="https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- 引入 id3-writer 库 -->
     <script type="module">
         import { ID3Writer } from 'https://egoroof.github.io/browser-id3-writer/js/browser-id3-writer.6.0.0.mjs';
@@ -1228,14 +1237,16 @@
                             ml_update_action_buttons_state();
 
                             // 为下载按钮添加点击事件
-                            $('#download_all_MusicButton_search').off('click').on('click', function() {
+                            $('#download_all_MusicButton_search').off('click').on('click', async function() {
                                 ml_apply_download_cooldown(this);
                                 const selectedSongs = ml_get_selected_songs();
                                 if (selectedSongs.length === 0) {
                                     ml_show_Alert('提示', '请先选择要下载的歌曲', 'warning');
                                     return;
                                 }
-                                ml_add_batch_task(selectedSongs, '搜索结果', `${selectedSongs.length} 首歌曲`, selectedSongs[0]?.picUrl || '', $('#level').val());
+                                await ml_add_batch_task(selectedSongs, '搜索结果', `${selectedSongs.length} 首歌曲`, selectedSongs[0]?.picUrl || '', $('#level').val(), {
+                                    sourceType: 'search'
+                                });
                             });
                             // 为全部播放按钮添加点击事件
                             $('#play_all_search').off('click').on('click', function() {
@@ -1500,7 +1511,7 @@
                         ml_update_action_buttons_state();
 
                         // 为下载按钮添加点击事件
-                        $('#download_all_MusicButton_playlist').off('click').on('click', function() {
+                        $('#download_all_MusicButton_playlist').off('click').on('click', async function() {
                             ml_apply_download_cooldown(this);
                             const selectedSongs = ml_get_selected_songs();
                             if (selectedSongs.length === 0) {
@@ -1510,7 +1521,10 @@
                             const playlistName = $('#playlist-name').text();
                             const playlistDesc = $('#playlist-desc').text();
                             const playlistCover = $('#playlist-cover').attr('src');
-                            ml_add_batch_task(selectedSongs, playlistName, playlistDesc || `${selectedSongs.length} 首歌曲`, playlistCover, $('#level').val());
+                            await ml_add_batch_task(selectedSongs, playlistName, playlistDesc || `${selectedSongs.length} 首歌曲`, playlistCover, $('#level').val(), {
+                                sourceType: 'playlist',
+                                collectionId: pid
+                            });
                         });
                         // 为全部播放按钮添加点击事件
                         $('#play_all_playlist').off('click').on('click', function() {
@@ -1625,7 +1639,7 @@
                         ml_update_action_buttons_state();
 
                         // 为下载按钮添加点击事件
-                        $('#download_all_MusicButton_album').off('click').on('click', function() {
+                        $('#download_all_MusicButton_album').off('click').on('click', async function() {
                             ml_apply_download_cooldown(this);
                             const selectedSongs = ml_get_selected_songs();
                             if (selectedSongs.length === 0) {
@@ -1635,7 +1649,10 @@
                             const albumName = $('#album-name').text();
                             const albumDesc = $('#album-desc').text();
                             const albumCover = $('#album-cover').attr('src');
-                            ml_add_batch_task(selectedSongs, albumName, albumDesc || `${selectedSongs.length} 首歌曲`, albumCover, $('#level').val());
+                            await ml_add_batch_task(selectedSongs, albumName, albumDesc || `${selectedSongs.length} 首歌曲`, albumCover, $('#level').val(), {
+                                sourceType: 'album',
+                                collectionId: aid
+                            });
                         });
                         // 为全部播放按钮添加点击事件
                         $('#play_all_album').off('click').on('click', function() {
@@ -1853,6 +1870,7 @@
             const DEFAULT_AUDIO_LEVEL = "standard";
             const DEFAULT_CONCURRENT = "3";
             const DEFAULT_SEARCH_LIMIT = "10";
+            const DEFAULT_COLLECTION_DOWNLOAD_MODE = "individual";
             const DEFAULT_SEPARATOR = "_";
             const DEFAULT_METADATA_WRITE_ENABLED = "true";
             const DEFAULT_METADATA_WRITE_COVER = "true";
@@ -1923,6 +1941,14 @@
             }
             $('#concurrent-downloads').val(savedConcurrent);
 
+            // Multi-song download mode
+            let savedCollectionDownloadMode = localStorage.getItem('ml_collection_download_mode');
+            if (!['individual', 'zip', 'folder'].includes(savedCollectionDownloadMode)) {
+                savedCollectionDownloadMode = DEFAULT_COLLECTION_DOWNLOAD_MODE;
+                localStorage.setItem('ml_collection_download_mode', savedCollectionDownloadMode);
+            }
+            $('#collection-download-mode').val(savedCollectionDownloadMode);
+
             // Search Limit
             let savedSearchLimit = localStorage.getItem('ml_search_limit');
             if (savedSearchLimit === null) {
@@ -1988,6 +2014,11 @@
                 localStorage.setItem('ml_concurrent_downloads', val);
             });
 
+            $('#collection-download-mode').on('change', function() {
+                const val = $(this).val();
+                localStorage.setItem('ml_collection_download_mode', ['individual', 'zip', 'folder'].includes(val) ? val : DEFAULT_COLLECTION_DOWNLOAD_MODE);
+            });
+
             $('#search_limit').on('change', function() {
                 let val = $(this).val();
                 if (!val) val = DEFAULT_SEARCH_LIMIT; // Use default if empty
@@ -2042,6 +2073,7 @@
                     if (confirmed) {
                         localStorage.setItem('ml_audio_level', DEFAULT_AUDIO_LEVEL);
                         localStorage.setItem('ml_concurrent_downloads', DEFAULT_CONCURRENT);
+                        localStorage.setItem('ml_collection_download_mode', DEFAULT_COLLECTION_DOWNLOAD_MODE);
                         localStorage.setItem('ml_search_limit', DEFAULT_SEARCH_LIMIT);
                         localStorage.setItem('ml_filename_template', DEFAULT_FILENAME_TEMPLATE);
                         localStorage.setItem('ml_filename_separator', DEFAULT_SEPARATOR);
@@ -2055,6 +2087,7 @@
                         // Update UI
                         $('#level').val(DEFAULT_AUDIO_LEVEL);
                         $('#concurrent-downloads').val(DEFAULT_CONCURRENT);
+                        $('#collection-download-mode').val(DEFAULT_COLLECTION_DOWNLOAD_MODE);
                         $('#search_limit').val(DEFAULT_SEARCH_LIMIT);
                         $('#filename-template').val(''); // Display as empty if default
                         $(`input[name="separator-type"][value="${DEFAULT_SEPARATOR}"]`).prop('checked', true);
