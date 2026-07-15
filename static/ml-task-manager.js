@@ -327,102 +327,82 @@ async function ml_execute_batch_task(task) {
         }
 
         const currentRoundFailed = [];
+        const cancelledSongs = [];
 
-        // Process in batches
-        for (let i = 0; i < songQueue.length && task.status !== ML_TASK_STATUS.CANCELLED; i += concurrentCount) {
-            if (task.isPaused || task.status === ML_TASK_STATUS.PAUSED) {
-                task.status = ML_TASK_STATUS.PAUSED;
-                task.remainingSongs = [...currentRoundFailed, ...songQueue.slice(i)];
-                ml_update_task_panel();
-                return;
-            }
-
-            const batch = songQueue.slice(i, i + concurrentCount);
-
-            // Download batch in parallel
-            const downloadPromises = batch.map(async (song) => {
-                if (task.status === ML_TASK_STATUS.CANCELLED) {
-                    return { success: false, song: song, cancelled: true };
-                }
+        async function downloadNextSong() {
+            while (songQueue.length > 0 && task.status === ML_TASK_STATUS.ACTIVE && !task.isPaused) {
+                const song = songQueue.shift();
 
                 try {
                     const response = await ml_fetch_task_song_info(song.id, task.level, task.abortController ? task.abortController.signal : undefined);
 
-                    if (task.status === ML_TASK_STATUS.CANCELLED) {
-                        return { success: false, song: song, cancelled: true };
+                    if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
+                        cancelledSongs.push(song);
+                        return;
                     }
 
-                    if (response.status === 200) {
-                        let processedLyrics = response.lyric;
-                        if (response.tlyric) {
-                            processedLyrics = lrctran(
-                                ml_sanitize_lrc_timestamps(response.lyric),
-                                ml_sanitize_lrc_timestamps(response.tlyric)
-                            );
-                        } else {
-                            processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
-                        }
-                        processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
+                    if (response.status !== 200) {
+                        throw new Error(response.msg || 'Failed to get song info');
+                    }
 
-                        await ml_music_download(
-                            response.al_name,
-                            response.ar_name,
-                            processedLyrics,
-                            response.name,
-                            response.pic,
-                            response.url,
-                            task.level,
-                            song.trackNumber,
-                            song.totalTracks,
-                            task.abortController ? task.abortController.signal : undefined
+                    let processedLyrics = response.lyric;
+                    if (response.tlyric) {
+                        processedLyrics = lrctran(
+                            ml_sanitize_lrc_timestamps(response.lyric),
+                            ml_sanitize_lrc_timestamps(response.tlyric)
                         );
-
-                        return { success: true, song: song };
                     } else {
-                        return { success: false, song: song, error: new Error(response.msg) };
+                        processedLyrics = ml_sanitize_lrc_timestamps(processedLyrics);
                     }
+                    processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
+
+                    await ml_music_download(
+                        response.al_name,
+                        response.ar_name,
+                        processedLyrics,
+                        response.name,
+                        response.pic,
+                        response.url,
+                        task.level,
+                        song.trackNumber,
+                        song.totalTracks,
+                        task.abortController ? task.abortController.signal : undefined
+                    );
+
+                    if (task.status === ML_TASK_STATUS.CANCELLED) {
+                        return;
+                    }
+
+                    task.completedCount++;
+                    task.successCount++;
                 } catch (error) {
                     if (task.status === ML_TASK_STATUS.CANCELLED || error?.name === 'AbortError') {
-                        return { success: false, song: song, cancelled: true };
+                        cancelledSongs.push(song);
+                        return;
                     }
-                    return { success: false, song: song, error: error };
-                }
-            });
 
-            const results = await Promise.all(downloadPromises);
-
-            if (task.status === ML_TASK_STATUS.CANCELLED) break;
-
-            const cancelledSongs = [];
-
-            // Update task progress
-            results.forEach(result => {
-                if (result.cancelled) {
-                    cancelledSongs.push(result.song);
-                    return;
-                }
-
-                task.completedCount++;
-                if (result.success) {
-                    task.successCount++;
-                } else {
+                    task.completedCount++;
                     task.failedCount++;
-                    currentRoundFailed.push(result.song);
+                    currentRoundFailed.push(song);
                 }
 
                 task.progress = (task.completedCount / task.totalCount) * 100;
                 ml_update_task_item(task);
-            });
-
-            if (task.isPaused || task.status === ML_TASK_STATUS.PAUSED) {
-                task.status = ML_TASK_STATUS.PAUSED;
-                task.remainingSongs = [...currentRoundFailed, ...cancelledSongs, ...songQueue.slice(i + concurrentCount)];
-                ml_update_task_panel();
-                return;
             }
         }
 
+        const workerCount = Math.min(concurrentCount, songQueue.length);
+        const workers = Array.from({ length: workerCount }, () => downloadNextSong());
+        await Promise.all(workers);
+
         if (task.status === ML_TASK_STATUS.CANCELLED) break;
+
+        if (task.isPaused || task.status === ML_TASK_STATUS.PAUSED) {
+            task.status = ML_TASK_STATUS.PAUSED;
+            task.remainingSongs = [...currentRoundFailed, ...cancelledSongs, ...songQueue];
+            ml_update_task_panel();
+            return;
+        }
 
         // Prepare for retry
         songQueue = currentRoundFailed;
