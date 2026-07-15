@@ -509,8 +509,12 @@ $(document).ready(function() {
 // ---------------------------------------------------------
 
 // 定义下载函数
-async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null) {
+async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
     try {
+        if (abortSignal && abortSignal.aborted) {
+            throw new DOMException('Download cancelled', 'AbortError');
+        }
+
         // 获取音质级别
         const audioLevel = level || getCurrentLevel();
         const audioFormat = getAudioFormatByLevel(audioLevel);
@@ -554,12 +558,15 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
 
         // 1. 获取音乐文件
         console.log("正在下载音乐文件...");
-        const audioResponse = await fetch(url);
+        const audioResponse = await fetch(url, { signal: abortSignal || undefined });
         if (!audioResponse.ok) {
             throw new Error(`无法下载音乐文件: ${audioResponse.statusText}`);
         }
         // 直接获取 ArrayBuffer
         const audioBuffer = await audioResponse.arrayBuffer();
+        if (abortSignal && abortSignal.aborted) {
+            throw new DOMException('Download cancelled', 'AbortError');
+        }
         console.log("音乐文件下载完成。");
 
         // 2. 获取封面图片
@@ -568,7 +575,7 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
         if (pic) {
             console.log("正在下载封面图片...");
             try {
-                const coverResponse = await fetch(pic);
+                const coverResponse = await fetch(pic, { signal: abortSignal || undefined });
                 if (!coverResponse.ok) {
                     console.warn(`无法下载封面图片: ${coverResponse.statusText}，将不添加封面。`);
                 } else {
@@ -583,6 +590,9 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
                     console.log("封面图片处理完成。");
                 }
             } catch (error) {
+                if (error?.name === 'AbortError') {
+                    throw error;
+                }
                 console.error("下载或处理封面图片时发生错误:", error);
                 console.warn("将不添加封面。");
             }
@@ -720,6 +730,10 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
             }
         }
 
+        if (abortSignal && abortSignal.aborted) {
+            throw new DOMException('Download cancelled', 'AbortError');
+        }
+
         // 4. 触发下载
         const blobUrl = URL.createObjectURL(taggedBlob);
         const a = document.createElement('a');
@@ -733,7 +747,10 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
 
     } catch (error) {
         console.error("下载或处理音乐文件时发生错误:", error);
-        ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');
+        if (error?.name !== 'AbortError') {
+            ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');
+        }
+        throw error;
     }
 };
 

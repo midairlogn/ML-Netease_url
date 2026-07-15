@@ -98,6 +98,7 @@ function ml_create_task(options) {
         isPaused: false,
         abortController: null,
         startTime: null,
+        remainingSongs: null,
 
         // ETA calculation
         emaSpeed: null,
@@ -163,23 +164,48 @@ async function ml_process_task_queue() {
     ml_task_manager.isProcessing = true;
 
     try {
-        while (true) {
-            // 使用固定的最大活动任务数 (1)
-            const activeTasks = ml_task_manager.tasks.filter(t => t.status === ML_TASK_STATUS.ACTIVE);
-            const waitingTasks = ml_task_manager.tasks.filter(t => t.status === ML_TASK_STATUS.WAITING);
+        // 使用固定的最大活动任务数 (1)
+        const activeTasks = ml_task_manager.tasks.filter(t => t.status === ML_TASK_STATUS.ACTIVE);
+        const waitingTasks = ml_task_manager.tasks.filter(t => t.status === ML_TASK_STATUS.WAITING);
 
-            // Check if we can start more tasks
-            if (activeTasks.length >= MAX_ACTIVE_TASKS || waitingTasks.length === 0) {
-                break;
-            }
-
-            // Start next waiting task
-            const nextTask = waitingTasks[0];
-            await ml_start_task(nextTask);
+        // Check if we can start more tasks
+        if (activeTasks.length >= MAX_ACTIVE_TASKS || waitingTasks.length === 0) {
+            return;
         }
+
+        // Start next waiting task without awaiting it. Keeping the queue processor
+        // locked for the full download can strand waiting tasks when an active task
+        // is cancelled before its async work settles.
+        ml_start_task(waitingTasks[0]);
     } finally {
         ml_task_manager.isProcessing = false;
     }
+}
+
+/**
+ * Fetch song details for a task with cancellation support.
+ */
+async function ml_fetch_task_song_info(songId, level, signal) {
+    const params = new URLSearchParams({
+        url: songId,
+        level: level,
+        type: 'json'
+    });
+
+    const response = await fetch(ml_song_info_post_url_base + '/Song_V1', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+        },
+        body: params.toString(),
+        signal: signal
+    });
+
+    if (!response.ok) {
+        throw new Error(`Failed to get song info: ${response.status}`);
+    }
+
+    return response.json();
 }
 
 /**
@@ -203,7 +229,7 @@ async function ml_start_task(task) {
         }
 
         // Task completed successfully
-        if (task.status !== ML_TASK_STATUS.CANCELLED) {
+        if (task.status === ML_TASK_STATUS.ACTIVE) {
             task.status = ML_TASK_STATUS.COMPLETED;
             task.progress = 100;
             // 显示任务完成通知
@@ -211,7 +237,7 @@ async function ml_start_task(task) {
         }
     } catch (error) {
         console.error(`Task ${task.id} failed:`, error);
-        if (task.status !== ML_TASK_STATUS.CANCELLED) {
+        if (task.status === ML_TASK_STATUS.ACTIVE) {
             task.status = ML_TASK_STATUS.FAILED;
         }
     } finally {
@@ -231,11 +257,7 @@ async function ml_execute_single_task(task) {
 
     try {
         // Fetch song info
-        const response = await $.post(ml_song_info_post_url_base + '/Song_V1', {
-            url: song.id,
-            level: task.level,
-            type: 'json'
-        });
+        const response = await ml_fetch_task_song_info(song.id, task.level, task.abortController ? task.abortController.signal : undefined);
 
         if (response.status === 200) {
             task.progress = 30;
@@ -252,12 +274,7 @@ async function ml_execute_single_task(task) {
             }
             processedLyrics = ml_resolve_lrc_timestamp_conflicts(processedLyrics);
 
-            // Check if paused
-            while (task.isPaused && task.status !== ML_TASK_STATUS.CANCELLED) {
-                await new Promise(resolve => setTimeout(resolve, 200));
-            }
-
-            if (task.status === ML_TASK_STATUS.CANCELLED) return;
+            if (task.status === ML_TASK_STATUS.CANCELLED || task.status === ML_TASK_STATUS.PAUSED || task.isPaused) return;
 
             // Download music
             await ml_music_download(
@@ -269,8 +286,11 @@ async function ml_execute_single_task(task) {
                 response.url,
                 task.level,
                 song.trackNumber,
-                song.totalTracks
+                song.totalTracks,
+                task.abortController ? task.abortController.signal : undefined
             );
+
+            if (task.status === ML_TASK_STATUS.CANCELLED) return;
 
             task.successCount = 1;
             task.completedCount = 1;
@@ -280,10 +300,13 @@ async function ml_execute_single_task(task) {
             throw new Error(response.msg || 'Failed to get song info');
         }
     } catch (error) {
+        if (task.status === ML_TASK_STATUS.CANCELLED || error?.name === 'AbortError') {
+            return;
+        }
         task.failedCount = 1;
         task.failedSongs = [song];
         // If it was a network error and not already handled by ml_show_error_toast
-        if (error instanceof TypeError || error.name === 'AbortError') {
+        if (error instanceof TypeError || error?.name === 'AbortError') {
              ml_show_error_toast(error, '解析失败', '网络请求错误');
         }
         throw error;
@@ -295,7 +318,7 @@ async function ml_execute_single_task(task) {
  */
 async function ml_execute_batch_task(task) {
     const concurrentCount = ml_get_concurrent_count();
-    let songQueue = [...task.songs];
+    let songQueue = task.remainingSongs ? [...task.remainingSongs] : [...task.songs];
     let attempt = 0;
 
     while (songQueue.length > 0 && attempt < ml_max_try_times && task.status !== ML_TASK_STATUS.CANCELLED) {
@@ -307,19 +330,11 @@ async function ml_execute_batch_task(task) {
 
         // Process in batches
         for (let i = 0; i < songQueue.length && task.status !== ML_TASK_STATUS.CANCELLED; i += concurrentCount) {
-            // Check if paused
-            while (task.isPaused && task.status !== ML_TASK_STATUS.CANCELLED) {
+            if (task.isPaused || task.status === ML_TASK_STATUS.PAUSED) {
                 task.status = ML_TASK_STATUS.PAUSED;
+                task.remainingSongs = [...currentRoundFailed, ...songQueue.slice(i)];
                 ml_update_task_panel();
-                await new Promise(resolve => setTimeout(resolve, 200));
-            }
-
-            if (task.status === ML_TASK_STATUS.CANCELLED) break;
-
-            // Resume from paused state
-            if (task.status === ML_TASK_STATUS.PAUSED) {
-                task.status = ML_TASK_STATUS.ACTIVE;
-                ml_update_task_panel();
+                return;
             }
 
             const batch = songQueue.slice(i, i + concurrentCount);
@@ -331,11 +346,11 @@ async function ml_execute_batch_task(task) {
                 }
 
                 try {
-                    const response = await $.post(ml_song_info_post_url_base + '/Song_V1', {
-                        url: song.id,
-                        level: task.level,
-                        type: 'json'
-                    });
+                    const response = await ml_fetch_task_song_info(song.id, task.level, task.abortController ? task.abortController.signal : undefined);
+
+                    if (task.status === ML_TASK_STATUS.CANCELLED) {
+                        return { success: false, song: song, cancelled: true };
+                    }
 
                     if (response.status === 200) {
                         let processedLyrics = response.lyric;
@@ -358,7 +373,8 @@ async function ml_execute_batch_task(task) {
                             response.url,
                             task.level,
                             song.trackNumber,
-                            song.totalTracks
+                            song.totalTracks,
+                            task.abortController ? task.abortController.signal : undefined
                         );
 
                         return { success: true, song: song };
@@ -366,15 +382,25 @@ async function ml_execute_batch_task(task) {
                         return { success: false, song: song, error: new Error(response.msg) };
                     }
                 } catch (error) {
+                    if (task.status === ML_TASK_STATUS.CANCELLED || error?.name === 'AbortError') {
+                        return { success: false, song: song, cancelled: true };
+                    }
                     return { success: false, song: song, error: error };
                 }
             });
 
             const results = await Promise.all(downloadPromises);
 
+            if (task.status === ML_TASK_STATUS.CANCELLED) break;
+
+            const cancelledSongs = [];
+
             // Update task progress
             results.forEach(result => {
-                if (result.cancelled) return;
+                if (result.cancelled) {
+                    cancelledSongs.push(result.song);
+                    return;
+                }
 
                 task.completedCount++;
                 if (result.success) {
@@ -387,10 +413,20 @@ async function ml_execute_batch_task(task) {
                 task.progress = (task.completedCount / task.totalCount) * 100;
                 ml_update_task_item(task);
             });
+
+            if (task.isPaused || task.status === ML_TASK_STATUS.PAUSED) {
+                task.status = ML_TASK_STATUS.PAUSED;
+                task.remainingSongs = [...currentRoundFailed, ...cancelledSongs, ...songQueue.slice(i + concurrentCount)];
+                ml_update_task_panel();
+                return;
+            }
         }
+
+        if (task.status === ML_TASK_STATUS.CANCELLED) break;
 
         // Prepare for retry
         songQueue = currentRoundFailed;
+        task.remainingSongs = songQueue;
         if (songQueue.length > 0) {
             task.completedCount = task.totalCount - songQueue.length;
             task.failedCount = 0;
@@ -399,6 +435,7 @@ async function ml_execute_batch_task(task) {
     }
 
     task.failedSongs = songQueue;
+    task.remainingSongs = [];
 }
 
 // ===== Task Control =====
@@ -409,13 +446,27 @@ async function ml_execute_batch_task(task) {
 function ml_pause_task(taskId) {
     const task = ml_task_manager.tasks.find(t => t.id === taskId);
     if (!task) return;
+    if (task.status === ML_TASK_STATUS.PAUSED ||
+        task.status === ML_TASK_STATUS.COMPLETED ||
+        task.status === ML_TASK_STATUS.FAILED ||
+        task.status === ML_TASK_STATUS.CANCELLED) return;
 
     task.isPaused = true;
+    task.status = ML_TASK_STATUS.PAUSED;
     task.pauseStartTime = Date.now();
+
+    if (task.abortController) {
+        task.abortController.abort();
+    }
+
     ml_update_task_panel();
+    ml_update_task_badge();
 
     // 显示暂停通知
     ml_show_task_paused_toast(task);
+
+    // A paused task no longer occupies the active slot.
+    setTimeout(() => ml_process_task_queue(), 100);
 }
 
 /**
@@ -424,6 +475,7 @@ function ml_pause_task(taskId) {
 function ml_resume_task(taskId) {
     const task = ml_task_manager.tasks.find(t => t.id === taskId);
     if (!task) return;
+    if (task.status !== ML_TASK_STATUS.PAUSED) return;
 
     task.isPaused = false;
 
@@ -434,12 +486,13 @@ function ml_resume_task(taskId) {
     }
     task.pauseStartTime = null;
 
-    // If task was waiting, restart queue processing
-    if (task.status === ML_TASK_STATUS.PAUSED) {
-        task.status = ML_TASK_STATUS.ACTIVE;
-    }
+    // Resumed tasks re-enter the pending queue and will start when a slot is free.
+    task.status = ML_TASK_STATUS.WAITING;
 
     ml_update_task_panel();
+
+    // Ensure a resumed waiting/paused task can be picked up if no task is active.
+    setTimeout(() => ml_process_task_queue(), 100);
 
     // 显示继续通知
     ml_show_task_resumed_toast(task);
