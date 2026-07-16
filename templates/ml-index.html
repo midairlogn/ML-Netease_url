@@ -1933,6 +1933,46 @@
                 }
             }
 
+            function ml_init_custom_select(selector) {
+                const $select = $(selector);
+                if (!$select.length || $select.next('.ml-custom-select').length) return;
+
+                const $customSelect = $('<div class="ml-custom-select dropdown"></div>');
+                const $toggle = $('<button type="button" class="ml-custom-select-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>');
+                const $menu = $('<ul class="dropdown-menu ml-custom-select-menu"></ul>');
+
+                $select.find('option').each(function() {
+                    const $option = $(this);
+                    const $item = $('<li></li>');
+                    const $button = $('<button type="button" class="ml-custom-select-option"></button>')
+                        .attr('data-value', $option.val())
+                        .text($option.text());
+
+                    $item.append($button);
+                    $menu.append($item);
+                });
+
+                function updateCustomSelect() {
+                    const selectedText = $select.find('option:selected').text();
+                    const selectedValue = $select.val();
+                    $toggle.text(selectedText);
+                    $menu.find('.ml-custom-select-option').each(function() {
+                        const isSelected = $(this).attr('data-value') === selectedValue;
+                        $(this).toggleClass('active', isSelected).attr('aria-selected', isSelected ? 'true' : 'false');
+                    });
+                }
+
+                $menu.on('click', '.ml-custom-select-option', function() {
+                    $select.val($(this).attr('data-value')).trigger('change');
+                });
+
+                $select.addClass('ml-native-select-hidden').attr('tabindex', '-1');
+                $customSelect.append($toggle, $menu);
+                $select.after($customSelect);
+                $select.on('change.mlCustomSelect', updateCustomSelect);
+                updateCustomSelect();
+            }
+
             // 1. Load settings on startup
 
             // Audio Level
@@ -1958,6 +1998,9 @@
                 localStorage.setItem('ml_collection_download_mode', savedCollectionDownloadMode);
             }
             $('#collection-download-mode').val(savedCollectionDownloadMode);
+
+            ml_init_custom_select('#level');
+            ml_init_custom_select('#collection-download-mode');
 
             // Search Limit
             let savedSearchLimit = localStorage.getItem('ml_search_limit');
@@ -2117,6 +2160,7 @@
 
                         // Trigger updates
                         $('#level').trigger('change');
+                        $('#collection-download-mode').trigger('change');
                         $('#filename-template').trigger('input');
                         $('input[name="separator-type"]').trigger('change');
 

@@ -42,6 +42,94 @@ h1 {
     transition: all 0.2s ease;
 }
 
+.form-select {
+    border-radius: 8px !important;
+    background-clip: padding-box;
+    overflow: hidden;
+}
+
+.ml-native-select-hidden {
+    display: none;
+}
+
+.ml-custom-select {
+    position: relative;
+    width: 100%;
+}
+
+.ml-custom-select-toggle {
+    width: 100%;
+    min-height: 46px;
+    padding: 10px 42px 10px 15px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #fff;
+    color: #212529;
+    text-align: left;
+    transition: all 0.2s ease;
+    box-shadow: none;
+    position: relative;
+}
+
+.ml-custom-select-toggle::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 15px;
+    width: 10px;
+    height: 10px;
+    border-right: 2px solid #495057;
+    border-bottom: 2px solid #495057;
+    transform: translateY(-65%) rotate(45deg);
+    transition: transform 0.2s ease;
+}
+
+.ml-custom-select-toggle[aria-expanded="true"]::after {
+    transform: translateY(-35%) rotate(225deg);
+}
+
+.ml-custom-select-toggle:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.15);
+    outline: 0;
+}
+
+.ml-custom-select-menu {
+    width: 100%;
+    min-width: 100%;
+    margin-top: 6px !important;
+    padding: 6px;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.08);
+    overflow: hidden;
+    z-index: 1065;
+}
+
+.ml-custom-select-option {
+    width: 100%;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #212529;
+    text-align: left;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ml-custom-select-option:hover,
+.ml-custom-select-option:focus {
+    background: #f1f6ff;
+    color: #0056b3;
+    outline: 0;
+}
+
+.ml-custom-select-option.active {
+    background: #0d6efd;
+    color: #fff;
+}
+
 /* 修复 input-group 中按钮的圆角被 Bootstrap 覆盖的问题 */
 .input-group > .btn {
     border-radius: 8px !important;
