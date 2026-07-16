@@ -286,7 +286,7 @@ function hasTransparency(ctx, width, height) {
     return false;
 }
 
-async function compressImage(imageBuffer, mimeType) {
+async function compressImage(imageBuffer, mimeType, shouldCropCover = true) {
     if (!imageBuffer || !mimeType || !mimeType.startsWith('image/')) {
         console.warn("无法压缩非图片或无效图片数据。");
         return { buffer: imageBuffer, mime: mimeType };
@@ -306,25 +306,37 @@ async function compressImage(imageBuffer, mimeType) {
             let width = img.width;
             let height = img.height;
 
-            // 1. 调整图片尺寸 (如果过大)，保持宽高比
-            // 此逻辑等同于Python的 img.thumbnail(max_size, ...)
-            if (width > MAX_IMAGE_SIDE_LENGTH || height > MAX_IMAGE_SIDE_LENGTH) {
-                const aspectRatio = width / height;
-                if (width > height) { // 横向或方形
-                    width = MAX_IMAGE_SIDE_LENGTH;
-                    height = width / aspectRatio;
-                } else { // 纵向
-                    height = MAX_IMAGE_SIDE_LENGTH;
-                    width = height * aspectRatio;
-                }
-                // 确保尺寸为整数，以便在canvas上绘制
-                width = Math.round(width);
-                height = Math.round(height);
-            }
+            if (shouldCropCover) {
+                const sourceSize = Math.min(img.width, img.height);
+                const sourceX = Math.floor((img.width - sourceSize) / 2);
+                const sourceY = Math.floor((img.height - sourceSize) / 2);
 
-            canvas.width = width;
-            canvas.height = height;
-            ctx.drawImage(img, 0, 0, width, height);
+                width = Math.min(sourceSize, MAX_IMAGE_SIDE_LENGTH);
+                height = width;
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, sourceX, sourceY, sourceSize, sourceSize, 0, 0, width, height);
+            } else {
+                // 1. 调整图片尺寸 (如果过大)，保持宽高比
+                // 此逻辑等同于Python的 img.thumbnail(max_size, ...)
+                if (width > MAX_IMAGE_SIDE_LENGTH || height > MAX_IMAGE_SIDE_LENGTH) {
+                    const aspectRatio = width / height;
+                    if (width > height) { // 横向或方形
+                        width = MAX_IMAGE_SIDE_LENGTH;
+                        height = width / aspectRatio;
+                    } else { // 纵向
+                        height = MAX_IMAGE_SIDE_LENGTH;
+                        width = height * aspectRatio;
+                    }
+                    // 确保尺寸为整数，以便在canvas上绘制
+                    width = Math.round(width);
+                    height = Math.round(height);
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+            }
 
             // 2. 确定输出格式和初始质量
             // Python的 img.convert('RGB') 暗示非透明格式，通常是JPEG。
@@ -576,6 +588,7 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
         const metadataWriteConfig = {
             enabled: (localStorage.getItem('ml_metadata_write_enabled') ?? 'true') === 'true',
             cover: (localStorage.getItem('ml_metadata_write_cover') ?? 'true') === 'true',
+            cropCover: (localStorage.getItem('ml_metadata_crop_cover') ?? 'true') === 'true',
             artist: (localStorage.getItem('ml_metadata_write_artist') ?? 'true') === 'true',
             album: (localStorage.getItem('ml_metadata_write_album') ?? 'true') === 'true',
             track: (localStorage.getItem('ml_metadata_write_track') ?? 'true') === 'true',
@@ -646,7 +659,7 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
                         const originalCoverMimeType = coverResponse.headers.get('Content-Type');
 
                         // 调用图片压缩函数
-                        const compressedImageData = await compressImage(originalCoverBuffer, originalCoverMimeType);
+                        const compressedImageData = await compressImage(originalCoverBuffer, originalCoverMimeType, metadataWriteConfig.cropCover);
                         coverBuffer = compressedImageData.buffer;
                         coverMimeType = compressedImageData.mime;
 
