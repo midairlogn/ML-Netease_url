@@ -2,6 +2,59 @@
 
 var ml_song_info_post_url_base = '';
 
+const ML_SONG_INFO_FETCH_TIMEOUT_MS = 30000;
+const ML_AUDIO_FETCH_TIMEOUT_MS = 120000;
+const ML_COVER_FETCH_TIMEOUT_MS = 30000;
+
+function ml_create_timeout_signal(parentSignal, timeoutMs, message) {
+    const controller = new AbortController();
+    let didTimeout = false;
+    let timeoutId = null;
+
+    const abortFromParent = () => {
+        if (!controller.signal.aborted) {
+            controller.abort();
+        }
+    };
+
+    if (parentSignal) {
+        if (parentSignal.aborted) {
+            abortFromParent();
+        } else {
+            parentSignal.addEventListener('abort', abortFromParent, { once: true });
+        }
+    }
+
+    if (timeoutMs > 0) {
+        timeoutId = setTimeout(() => {
+            didTimeout = true;
+            if (!controller.signal.aborted) {
+                controller.abort();
+            }
+        }, timeoutMs);
+    }
+
+    return {
+        signal: controller.signal,
+        cleanup: () => {
+            if (timeoutId !== null) {
+                clearTimeout(timeoutId);
+            }
+            if (parentSignal) {
+                parentSignal.removeEventListener('abort', abortFromParent);
+            }
+        },
+        normalizeError: (error) => {
+            if (didTimeout && error?.name === 'AbortError') {
+                const timeoutError = new Error(message || '请求超时，请稍后重试');
+                timeoutError.name = 'TimeoutError';
+                return timeoutError;
+            }
+            return error;
+        }
+    };
+}
+
 function ml_preprocess_lrc(lyrics) {
     if (!lyrics) return lyrics;
 
@@ -558,14 +611,22 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
 
         // 1. 获取音乐文件
         console.log("正在下载音乐文件...");
-        const audioResponse = await fetch(url, { signal: abortSignal || undefined });
-        if (!audioResponse.ok) {
-            throw new Error(`无法下载音乐文件: ${audioResponse.statusText}`);
-        }
-        // 直接获取 ArrayBuffer
-        const audioBuffer = await audioResponse.arrayBuffer();
-        if (abortSignal && abortSignal.aborted) {
-            throw new DOMException('Download cancelled', 'AbortError');
+        let audioBuffer;
+        const audioTimeout = ml_create_timeout_signal(abortSignal, ML_AUDIO_FETCH_TIMEOUT_MS, '下载音乐文件超时，请稍后重试');
+        try {
+            const audioResponse = await fetch(url, { signal: audioTimeout.signal });
+            if (!audioResponse.ok) {
+                throw new Error(`无法下载音乐文件: ${audioResponse.statusText}`);
+            }
+            // 直接获取 ArrayBuffer
+            audioBuffer = await audioResponse.arrayBuffer();
+            if (abortSignal && abortSignal.aborted) {
+                throw new DOMException('Download cancelled', 'AbortError');
+            }
+        } catch (error) {
+            throw audioTimeout.normalizeError(error);
+        } finally {
+            audioTimeout.cleanup();
         }
         console.log("音乐文件下载完成。");
 
@@ -575,19 +636,26 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
         if (pic) {
             console.log("正在下载封面图片...");
             try {
-                const coverResponse = await fetch(pic, { signal: abortSignal || undefined });
-                if (!coverResponse.ok) {
-                    console.warn(`无法下载封面图片: ${coverResponse.statusText}，将不添加封面。`);
-                } else {
-                    const originalCoverBuffer = await coverResponse.arrayBuffer();
-                    const originalCoverMimeType = coverResponse.headers.get('Content-Type');
+                const coverTimeout = ml_create_timeout_signal(abortSignal, ML_COVER_FETCH_TIMEOUT_MS, '下载封面图片超时，将不添加封面');
+                try {
+                    const coverResponse = await fetch(pic, { signal: coverTimeout.signal });
+                    if (!coverResponse.ok) {
+                        console.warn(`无法下载封面图片: ${coverResponse.statusText}，将不添加封面。`);
+                    } else {
+                        const originalCoverBuffer = await coverResponse.arrayBuffer();
+                        const originalCoverMimeType = coverResponse.headers.get('Content-Type');
 
-                    // 调用图片压缩函数
-                    const compressedImageData = await compressImage(originalCoverBuffer, originalCoverMimeType);
-                    coverBuffer = compressedImageData.buffer;
-                    coverMimeType = compressedImageData.mime;
+                        // 调用图片压缩函数
+                        const compressedImageData = await compressImage(originalCoverBuffer, originalCoverMimeType);
+                        coverBuffer = compressedImageData.buffer;
+                        coverMimeType = compressedImageData.mime;
 
-                    console.log("封面图片处理完成。");
+                        console.log("封面图片处理完成。");
+                    }
+                } catch (error) {
+                    throw coverTimeout.normalizeError(error);
+                } finally {
+                    coverTimeout.cleanup();
                 }
             } catch (error) {
                 if (error?.name === 'AbortError') {

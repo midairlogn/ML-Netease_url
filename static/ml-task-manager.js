@@ -105,6 +105,7 @@ function ml_create_task(options) {
         folderHandle: options.folderHandle || null,
         generatedFiles: [],
         usedFileNames: new Set(),
+        folderFallbackNotified: false,
 
         // State management
         isPaused: false,
@@ -157,7 +158,7 @@ async function ml_add_batch_task(songs, title, description, cover, level, option
 
     const outputMode = ml_get_collection_download_mode();
     const defaultName = title || options.collectionId || `${songs.length} songs`;
-    const collectionName = ml_prompt_collection_download_name(defaultName);
+    const collectionName = await ml_prompt_collection_download_name(defaultName, outputMode);
     if (collectionName === null) {
         return null;
     }
@@ -171,13 +172,32 @@ async function ml_add_batch_task(songs, title, description, cover, level, option
             finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
         } else {
             try {
-                const parentHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-                folderHandle = await parentHandle.getDirectoryHandle(ml_sanitize_path_segment(collectionName), { create: true });
+                const parentHandle = await window.showDirectoryPicker({
+                    id: 'ml-netease-download-folder',
+                    mode: 'readwrite',
+                    startIn: 'downloads'
+                });
+
+                if (!await ml_verify_directory_writable(parentHandle)) {
+                    ml_show_Alert('没有文件夹写入权限', '浏览器没有授予所选文件夹的写入权限，将改为下载ZIP压缩包。请避免选择受保护目录，或在浏览器权限弹窗中允许写入。', 'warning');
+                    finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+                } else {
+                    folderHandle = await parentHandle.getDirectoryHandle(ml_sanitize_path_segment(collectionName), { create: true });
+
+                    if (!await ml_verify_directory_writable(folderHandle)) {
+                        ml_show_Alert('没有子文件夹写入权限', '浏览器没有授予目标子文件夹的写入权限，将改为下载ZIP压缩包。', 'warning');
+                        finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+                        folderHandle = null;
+                    }
+                }
             } catch (error) {
                 if (error?.name !== 'AbortError') {
-                    ml_show_Alert('文件夹选择失败', '无法访问所选文件夹，请重试或切换为ZIP下载。', 'error');
+                    ml_show_Alert('文件夹选择失败', '无法访问所选文件夹或浏览器拒绝写入，将改为下载ZIP压缩包。', 'warning');
+                    finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+                    folderHandle = null;
+                } else {
+                    return null;
                 }
-                return null;
             }
         }
     }
@@ -207,13 +227,174 @@ function ml_get_collection_download_mode() {
     return Object.values(ML_COLLECTION_DOWNLOAD_MODE).includes(mode) ? mode : ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
 }
 
-function ml_prompt_collection_download_name(defaultName) {
+async function ml_prompt_collection_download_name(defaultName, outputMode) {
     const fallbackName = defaultName || 'download';
-    const input = window.prompt('请输入多曲下载名称', fallbackName);
+    const input = await ml_show_collection_name_prompt(fallbackName, outputMode);
     if (input === null) return null;
 
     const sanitized = ml_sanitize_path_segment(input.trim() || fallbackName);
     return sanitized || 'download';
+}
+
+function ml_get_collection_prompt_text(outputMode) {
+    if (outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
+        return {
+            title: '设置ZIP压缩包名称',
+            message: '请输入本次多曲下载的ZIP文件名。系统会自动添加 .zip 后缀。'
+        };
+    }
+    if (outputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER) {
+        return {
+            title: '设置目标文件夹名称',
+            message: '请输入本次多曲下载要创建的文件夹名称。下一步请选择保存位置；如果浏览器拒绝写入，将自动改为ZIP下载。'
+        };
+    }
+    return {
+        title: '设置下载任务名称',
+        message: '请输入本次多曲下载任务的名称。单曲文件仍会按文件名模板分别下载。'
+    };
+}
+
+function ml_show_collection_name_prompt(defaultName, outputMode) {
+    return new Promise((resolve) => {
+        const promptText = ml_get_collection_prompt_text(outputMode);
+        let modalElement = document.getElementById('ml_collection_name_modal');
+
+        if (!modalElement) {
+            modalElement = document.createElement('div');
+            modalElement.className = 'modal fade';
+            modalElement.id = 'ml_collection_name_modal';
+            modalElement.tabIndex = -1;
+            modalElement.setAttribute('aria-hidden', 'true');
+            modalElement.innerHTML = `
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title" id="ml_collection_name_modal_title">设置下载名称</h5>
+                            <button type="button" class="btn-close" id="ml_collection_name_close" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="text-muted small mb-2" id="ml_collection_name_modal_message"></p>
+                            <label for="ml_collection_name_input" class="form-label">名称</label>
+                            <input type="text" class="form-control" id="ml_collection_name_input" maxlength="120">
+                            <div class="form-text">不能使用 \\ / : * ? &quot; &lt; &gt; |，这些字符会自动替换为下划线。</div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" id="ml_collection_name_cancel">取消</button>
+                            <button type="button" class="btn btn-primary" id="ml_collection_name_confirm">确定</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(modalElement);
+        }
+
+        const input = modalElement.querySelector('#ml_collection_name_input');
+        const title = modalElement.querySelector('#ml_collection_name_modal_title');
+        const message = modalElement.querySelector('#ml_collection_name_modal_message');
+        const confirmButton = modalElement.querySelector('#ml_collection_name_confirm');
+        const cancelButton = modalElement.querySelector('#ml_collection_name_cancel');
+        const closeButton = modalElement.querySelector('#ml_collection_name_close');
+
+        title.textContent = promptText.title;
+        message.textContent = promptText.message;
+        input.value = defaultName;
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement, { backdrop: 'static' });
+        let resolved = false;
+
+        const cleanup = () => {
+            confirmButton.removeEventListener('click', onConfirm);
+            cancelButton.removeEventListener('click', onCancel);
+            closeButton.removeEventListener('click', onCancel);
+            input.removeEventListener('keydown', onKeyDown);
+            modalElement.removeEventListener('hidden.bs.modal', onHidden);
+        };
+
+        const finish = (value) => {
+            if (resolved) return;
+            resolved = true;
+            cleanup();
+            resolve(value);
+        };
+
+        const onConfirm = () => {
+            const value = input.value.trim() || defaultName;
+            document.activeElement?.blur();
+            modal.hide();
+            finish(value);
+        };
+
+        const onCancel = () => {
+            document.activeElement?.blur();
+            modal.hide();
+            finish(null);
+        };
+
+        const onKeyDown = (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                onConfirm();
+            }
+        };
+
+        const onHidden = () => finish(null);
+
+        confirmButton.addEventListener('click', onConfirm);
+        cancelButton.addEventListener('click', onCancel);
+        closeButton.addEventListener('click', onCancel);
+        input.addEventListener('keydown', onKeyDown);
+        modalElement.addEventListener('hidden.bs.modal', onHidden);
+
+        modal.show();
+        setTimeout(() => {
+            input.focus();
+            input.select();
+        }, 150);
+    });
+}
+
+async function ml_ensure_directory_write_permission(directoryHandle) {
+    if (!directoryHandle) return false;
+    const options = { mode: 'readwrite' };
+
+    if (typeof directoryHandle.queryPermission === 'function') {
+        const currentPermission = await directoryHandle.queryPermission(options);
+        if (currentPermission === 'granted') return true;
+    }
+
+    if (typeof directoryHandle.requestPermission === 'function') {
+        return await directoryHandle.requestPermission(options) === 'granted';
+    }
+
+    return true;
+}
+
+function ml_is_folder_write_blocked_error(error) {
+    return error?.name === 'NotAllowedError' ||
+        error?.name === 'SecurityError' ||
+        error?.name === 'AbortError' ||
+        /system file|permission|denied|not allowed|security/i.test(error?.message || '');
+}
+
+async function ml_verify_directory_writable(directoryHandle) {
+    if (!await ml_ensure_directory_write_permission(directoryHandle)) {
+        return false;
+    }
+
+    const probeName = `.ml-write-test-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
+    try {
+        const fileHandle = await directoryHandle.getFileHandle(probeName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write('ok');
+        await writable.close();
+        if (typeof directoryHandle.removeEntry === 'function') {
+            await directoryHandle.removeEntry(probeName);
+        }
+        return true;
+    } catch (error) {
+        console.warn('Folder write probe failed:', error);
+        return false;
+    }
 }
 
 function ml_sanitize_path_segment(value) {
@@ -350,20 +531,27 @@ async function ml_fetch_task_song_info(songId, level, signal) {
         type: 'json'
     });
 
-    const response = await fetch(ml_song_info_post_url_base + '/Song_V1', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
-        },
-        body: params.toString(),
-        signal: signal
-    });
+    const timeout = ml_create_timeout_signal(signal, ML_SONG_INFO_FETCH_TIMEOUT_MS, '获取歌曲信息超时，请稍后重试');
+    try {
+        const response = await fetch(ml_song_info_post_url_base + '/Song_V1', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+            },
+            body: params.toString(),
+            signal: timeout.signal
+        });
 
-    if (!response.ok) {
-        throw new Error(`Failed to get song info: ${response.status}`);
+        if (!response.ok) {
+            throw new Error(`Failed to get song info: ${response.status}`);
+        }
+
+        return response.json();
+    } catch (error) {
+        throw timeout.normalizeError(error);
+    } finally {
+        timeout.cleanup();
     }
-
-    return response.json();
 }
 
 /**
@@ -516,13 +704,26 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
             throw new Error('Folder handle is not available');
         }
 
-        const fileName = await ml_get_unique_folder_file_name(task.folderHandle, musicFile.fileName, task.usedFileNames);
-        const fileHandle = await task.folderHandle.getFileHandle(fileName, { create: true });
-        const writable = await fileHandle.createWritable();
+        let fileName = null;
         try {
+            fileName = await ml_get_unique_folder_file_name(task.folderHandle, musicFile.fileName, task.usedFileNames);
+            const fileHandle = await task.folderHandle.getFileHandle(fileName, { create: true });
+            const writable = await fileHandle.createWritable();
             await writable.write(musicFile.blob);
-        } finally {
             await writable.close();
+        } catch (error) {
+            if (!ml_is_folder_write_blocked_error(error)) {
+                throw error;
+            }
+
+            task.outputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+            task.folderHandle = null;
+            task.generatedFiles.push({ fileName: fileName || ml_get_unique_file_name(musicFile.fileName, task.usedFileNames), blob: musicFile.blob });
+
+            if (!task.folderFallbackNotified) {
+                task.folderFallbackNotified = true;
+                ml_show_Alert('已改为ZIP下载', '浏览器拒绝写入所选文件夹，当前任务将继续处理并在完成后下载ZIP压缩包。普通浏览器下载仍会保存到你的默认下载目录。', 'warning');
+            }
         }
     }
 }
@@ -608,6 +809,7 @@ async function ml_execute_batch_task(task) {
                         return;
                     }
 
+                    console.warn(`Task ${task.id}: song ${song.id || song.name || 'unknown'} failed, will retry if attempts remain.`, error);
                     task.completedCount++;
                     task.failedCount++;
                     currentRoundFailed.push(song);
