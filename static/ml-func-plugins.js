@@ -3,8 +3,17 @@
 var ml_song_info_post_url_base = '';
 
 const ML_SONG_INFO_FETCH_TIMEOUT_MS = 30000;
-const ML_AUDIO_FETCH_TIMEOUT_MS = 120000;
 const ML_COVER_FETCH_TIMEOUT_MS = 30000;
+const ML_AUDIO_FETCH_TIMEOUT_BY_LEVEL_MS = {
+    standard: 120000,
+    exhigh: 180000,
+    lossless: 300000,
+    hires: 420000,
+    sky: 420000,
+    jyeffect: 420000,
+    jymaster: 600000
+};
+const ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS = 300000;
 
 function ml_create_timeout_signal(parentSignal, timeoutMs, message) {
     const controller = new AbortController();
@@ -409,6 +418,10 @@ function getAudioFormatByLevel(level) {
     return 'flac';
 }
 
+function ml_get_audio_fetch_timeout_ms(level) {
+    return ML_AUDIO_FETCH_TIMEOUT_BY_LEVEL_MS[level] || ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS;
+}
+
 // 获取当前选择的音质级别
 function getCurrentLevel() {
     const levelSelect = document.getElementById('level');
@@ -625,7 +638,9 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
         // 1. 获取音乐文件
         console.log("正在下载音乐文件...");
         let audioBuffer;
-        const audioTimeout = ml_create_timeout_signal(abortSignal, ML_AUDIO_FETCH_TIMEOUT_MS, '下载音乐文件超时，请稍后重试');
+        const audioFetchTimeoutMs = ml_get_audio_fetch_timeout_ms(audioLevel);
+        console.log(`音频下载超时设置: ${Math.round(audioFetchTimeoutMs / 1000)}秒`);
+        const audioTimeout = ml_create_timeout_signal(abortSignal, audioFetchTimeoutMs, '下载音乐文件超时，请稍后重试');
         try {
             const audioResponse = await fetch(url, { signal: audioTimeout.signal });
             if (!audioResponse.ok) {
@@ -1387,18 +1402,22 @@ async function ml_donwload_song_list(ml_selected_level, custom_song_list = null)
 
                     // 下载完成后立即更新进度（不等待其他并行任务）
                     if (!result.cancelled && ml_download_state.isDownloading) {
-                        ml_download_state.completedCount++;
                         if (result.success) {
+                            ml_download_state.completedCount++;
                             ml_download_state.currentIndex += 0.9;
                             ml_download_state.successCount++;
                             console.log(`✅ 成功下载: ${song.name}`);
                         } else {
-                            if (result.infoFetched) {
-                                ml_download_state.currentIndex += 0.9;
-                            } else {
-                                ml_download_state.currentIndex += 1;
+                            const isFinalAttempt = attempt >= ml_max_try_times - 1;
+                            if (isFinalAttempt) {
+                                ml_download_state.completedCount++;
+                                if (result.infoFetched) {
+                                    ml_download_state.currentIndex += 0.9;
+                                } else {
+                                    ml_download_state.currentIndex += 1;
+                                }
+                                ml_download_state.failedCount++;
                             }
-                            ml_download_state.failedCount++;
                             console.error(`❌ 下载失败: ${song.name}`, result.error);
                         }
                         ml_update_progress_ui();
@@ -1431,9 +1450,9 @@ async function ml_donwload_song_list(ml_selected_level, custom_song_list = null)
             // 更新失败列表用于下一轮重试
             songQueue = currentRoundFailed;
             if (songQueue.length > 0) {
-                // 重置索引用于重试显示
-                ml_download_state.currentIndex = ml_download_state.totalCount - songQueue.length;
-                ml_download_state.completedCount = ml_download_state.totalCount - songQueue.length;
+                // 重试中的失败不计入完成，避免 100% 后仍继续重试。
+                ml_download_state.currentIndex = ml_download_state.successCount;
+                ml_download_state.completedCount = ml_download_state.successCount;
                 ml_download_state.failedCount = 0;
             }
             attempt++;

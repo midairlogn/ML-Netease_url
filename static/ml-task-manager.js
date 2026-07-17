@@ -576,10 +576,14 @@ async function ml_start_task(task) {
 
         // Task completed successfully
         if (task.status === ML_TASK_STATUS.ACTIVE) {
-            task.status = ML_TASK_STATUS.COMPLETED;
+            task.status = task.failedSongs && task.failedSongs.length > 0 ? ML_TASK_STATUS.FAILED : ML_TASK_STATUS.COMPLETED;
             task.progress = 100;
-            // 显示任务完成通知
-            ml_show_task_completed_toast(task);
+            if (task.status === ML_TASK_STATUS.FAILED) {
+                ml_show_task_failed_toast(task);
+            } else {
+                // 显示任务完成通知
+                ml_show_task_completed_toast(task);
+            }
         }
     } catch (error) {
         console.error(`Task ${task.id} failed:`, error);
@@ -760,6 +764,11 @@ async function ml_execute_batch_task(task) {
     let songQueue = task.remainingSongs ? [...task.remainingSongs] : [...task.songs];
     let attempt = 0;
 
+    task.failedCount = 0;
+    task.failedSongs = [];
+    task.completedCount = task.successCount;
+    task.progress = (task.completedCount / task.totalCount) * 100;
+
     while (songQueue.length > 0 && attempt < ml_max_try_times && task.status !== ML_TASK_STATUS.CANCELLED) {
         if (attempt > 0) {
             console.log(`Task ${task.id}: Retry attempt ${attempt}, remaining: ${songQueue.length}`);
@@ -810,11 +819,10 @@ async function ml_execute_batch_task(task) {
                     }
 
                     console.warn(`Task ${task.id}: song ${song.id || song.name || 'unknown'} failed, will retry if attempts remain.`, error);
-                    task.completedCount++;
-                    task.failedCount++;
                     currentRoundFailed.push(song);
                 }
 
+                task.completedCount = task.successCount + task.failedCount;
                 task.progress = (task.completedCount / task.totalCount) * 100;
                 ml_update_task_item(task);
             }
@@ -839,15 +847,23 @@ async function ml_execute_batch_task(task) {
         // Prepare for retry
         songQueue = currentRoundFailed;
         task.remainingSongs = songQueue;
-        if (songQueue.length > 0) {
-            task.completedCount = task.totalCount - songQueue.length;
-            task.failedCount = 0;
-        }
+        task.failedCount = 0;
+        task.completedCount = task.successCount;
+        task.progress = (task.completedCount / task.totalCount) * 100;
+        ml_update_task_item(task);
         attempt++;
     }
 
     task.failedSongs = songQueue;
+    task.failedCount = songQueue.length;
+    task.completedCount = task.successCount + task.failedCount;
+    task.progress = (task.completedCount / task.totalCount) * 100;
     task.remainingSongs = [];
+
+    if (task.failedSongs.length > 0 && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.generatedFiles.length > 0) {
+        const failedNames = task.failedSongs.map(song => song.name || song.id).join('\n');
+        ml_show_Alert('部分歌曲下载失败', `ZIP压缩包只包含已成功下载的 ${task.successCount} 首歌曲。\n失败: ${task.failedCount} 首\n\n${failedNames}`, 'warning');
+    }
 
     if (task.status === ML_TASK_STATUS.ACTIVE) {
         await ml_finish_zip_task(task);
@@ -1541,6 +1557,20 @@ function ml_show_task_completed_toast(task) {
         subtitle: task.type === ML_TASK_TYPE.BATCH ?
             `${task.successCount}/${task.totalCount} 首歌曲下载完成` :
             task.subtitle,
+        cover: task.cover
+    });
+}
+
+/**
+ * 显示任务失败通知
+ */
+function ml_show_task_failed_toast(task) {
+    ml_show_toast({
+        type: 'error',
+        title: task.title,
+        subtitle: task.type === ML_TASK_TYPE.BATCH ?
+            `${task.successCount}/${task.totalCount} 首歌曲下载完成，${task.failedCount} 首失败` :
+            '下载失败',
         cover: task.cover
     });
 }
