@@ -586,10 +586,11 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
         const audioFormat = getAudioFormatByLevel(audioLevel);
         console.log(`当前音质级别: ${audioLevel}, 格式: ${audioFormat}`);
 
+        const savedCompressCover = localStorage.getItem('ml_metadata_compress_cover') ?? localStorage.getItem('ml_metadata_crop_cover') ?? 'true';
         const metadataWriteConfig = {
             enabled: (localStorage.getItem('ml_metadata_write_enabled') ?? 'true') === 'true',
             cover: (localStorage.getItem('ml_metadata_write_cover') ?? 'true') === 'true',
-            compressCover: (localStorage.getItem('ml_metadata_compress_cover') ?? 'true') === 'true',
+            compressCover: savedCompressCover === 'true',
             artist: (localStorage.getItem('ml_metadata_write_artist') ?? 'true') === 'true',
             album: (localStorage.getItem('ml_metadata_write_album') ?? 'true') === 'true',
             track: (localStorage.getItem('ml_metadata_write_track') ?? 'true') === 'true',

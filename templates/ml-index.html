@@ -1893,6 +1893,15 @@
                 return value === 'true';
             }
 
+            function ml_get_or_migrate_bool_setting(key, legacyKey, defaultValue) {
+                let value = localStorage.getItem(key);
+                if (value === null) {
+                    value = localStorage.getItem(legacyKey) ?? defaultValue;
+                    localStorage.setItem(key, value);
+                }
+                return value === 'true';
+            }
+
             function ml_save_metadata_write_settings() {
                 localStorage.setItem('ml_metadata_write_enabled', $('#metadata-write-enabled').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_cover', $('#metadata-write-cover').is(':checked') ? 'true' : 'false');
@@ -2035,7 +2044,7 @@
             // Metadata write settings
             const savedMetadataWriteEnabled = ml_get_or_init_bool_setting('ml_metadata_write_enabled', DEFAULT_METADATA_WRITE_ENABLED);
             const savedMetadataWriteCover = ml_get_or_init_bool_setting('ml_metadata_write_cover', DEFAULT_METADATA_WRITE_COVER);
-            const savedMetadataCompressCover = ml_get_or_init_bool_setting('ml_metadata_compress_cover', DEFAULT_METADATA_COMPRESS_COVER);
+            const savedMetadataCompressCover = ml_get_or_migrate_bool_setting('ml_metadata_compress_cover', 'ml_metadata_crop_cover', DEFAULT_METADATA_COMPRESS_COVER);
             const savedMetadataWriteArtist = ml_get_or_init_bool_setting('ml_metadata_write_artist', DEFAULT_METADATA_WRITE_ARTIST);
             const savedMetadataWriteAlbum = ml_get_or_init_bool_setting('ml_metadata_write_album', DEFAULT_METADATA_WRITE_ALBUM);
             const savedMetadataWriteTrack = ml_get_or_init_bool_setting('ml_metadata_write_track', DEFAULT_METADATA_WRITE_TRACK);
