@@ -5,15 +5,15 @@ var ml_song_info_post_url_base = '';
 const ML_SONG_INFO_FETCH_TIMEOUT_MS = 30000;
 const ML_COVER_FETCH_TIMEOUT_MS = 30000;
 const ML_AUDIO_FETCH_TIMEOUT_BY_LEVEL_MS = {
-    standard: 120000,
-    exhigh: 180000,
-    lossless: 300000,
-    hires: 420000,
-    sky: 420000,
-    jyeffect: 420000,
-    jymaster: 600000
+    standard: 300000,
+    exhigh: 480000,
+    lossless: 900000,
+    hires: 1200000,
+    sky: 1200000,
+    jyeffect: 1200000,
+    jymaster: 1800000
 };
-const ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS = 300000;
+const ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS = 900000;
 
 function ml_create_timeout_signal(parentSignal, timeoutMs, message) {
     const controller = new AbortController();
