@@ -458,8 +458,8 @@
                                         <label class="form-check-label" for="metadata-write-cover">封面</label>
                                     </div>
                                     <div class="form-check mb-0">
-                                        <input class="form-check-input" type="checkbox" id="metadata-crop-cover">
-                                        <label class="form-check-label" for="metadata-crop-cover">裁剪封面</label>
+                                        <input class="form-check-input" type="checkbox" id="metadata-compress-cover">
+                                        <label class="form-check-label" for="metadata-compress-cover">压缩封面</label>
                                     </div>
                                     <div class="form-check mb-0">
                                         <input class="form-check-input" type="checkbox" id="metadata-write-artist">
@@ -1878,7 +1878,7 @@
             const DEFAULT_SEPARATOR = "_";
             const DEFAULT_METADATA_WRITE_ENABLED = "true";
             const DEFAULT_METADATA_WRITE_COVER = "true";
-            const DEFAULT_METADATA_CROP_COVER = "true";
+            const DEFAULT_METADATA_COMPRESS_COVER = "true";
             const DEFAULT_METADATA_WRITE_ARTIST = "true";
             const DEFAULT_METADATA_WRITE_ALBUM = "true";
             const DEFAULT_METADATA_WRITE_TRACK = "true";
@@ -1896,7 +1896,7 @@
             function ml_save_metadata_write_settings() {
                 localStorage.setItem('ml_metadata_write_enabled', $('#metadata-write-enabled').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_cover', $('#metadata-write-cover').is(':checked') ? 'true' : 'false');
-                localStorage.setItem('ml_metadata_crop_cover', $('#metadata-crop-cover').is(':checked') ? 'true' : 'false');
+                localStorage.setItem('ml_metadata_compress_cover', $('#metadata-compress-cover').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_artist', $('#metadata-write-artist').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_album', $('#metadata-write-album').is(':checked') ? 'true' : 'false');
                 localStorage.setItem('ml_metadata_write_track', $('#metadata-write-track').is(':checked') ? 'true' : 'false');
@@ -1907,7 +1907,7 @@
                 const enabled = $('#metadata-write-enabled').is(':checked');
                 const coverEnabled = enabled && $('#metadata-write-cover').is(':checked');
                 $('#metadata-write-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-track, #metadata-write-lyrics').prop('disabled', !enabled);
-                $('#metadata-crop-cover').prop('disabled', !coverEnabled);
+                $('#metadata-compress-cover').prop('disabled', !coverEnabled);
             }
 
             function ml_update_metadata_write_preview() {
@@ -1919,7 +1919,7 @@
 
                 const selectedItems = [];
                 if ($('#metadata-write-cover').is(':checked')) {
-                    selectedItems.push($('#metadata-crop-cover').is(':checked') ? '封面(裁剪)' : '封面');
+                    selectedItems.push($('#metadata-compress-cover').is(':checked') ? '封面(压缩)' : '封面');
                 }
                 if ($('#metadata-write-artist').is(':checked')) selectedItems.push('歌手');
                 if ($('#metadata-write-album').is(':checked')) selectedItems.push('专辑');
@@ -2035,7 +2035,7 @@
             // Metadata write settings
             const savedMetadataWriteEnabled = ml_get_or_init_bool_setting('ml_metadata_write_enabled', DEFAULT_METADATA_WRITE_ENABLED);
             const savedMetadataWriteCover = ml_get_or_init_bool_setting('ml_metadata_write_cover', DEFAULT_METADATA_WRITE_COVER);
-            const savedMetadataCropCover = ml_get_or_init_bool_setting('ml_metadata_crop_cover', DEFAULT_METADATA_CROP_COVER);
+            const savedMetadataCompressCover = ml_get_or_init_bool_setting('ml_metadata_compress_cover', DEFAULT_METADATA_COMPRESS_COVER);
             const savedMetadataWriteArtist = ml_get_or_init_bool_setting('ml_metadata_write_artist', DEFAULT_METADATA_WRITE_ARTIST);
             const savedMetadataWriteAlbum = ml_get_or_init_bool_setting('ml_metadata_write_album', DEFAULT_METADATA_WRITE_ALBUM);
             const savedMetadataWriteTrack = ml_get_or_init_bool_setting('ml_metadata_write_track', DEFAULT_METADATA_WRITE_TRACK);
@@ -2043,7 +2043,7 @@
 
             $('#metadata-write-enabled').prop('checked', savedMetadataWriteEnabled);
             $('#metadata-write-cover').prop('checked', savedMetadataWriteCover);
-            $('#metadata-crop-cover').prop('checked', savedMetadataCropCover);
+            $('#metadata-compress-cover').prop('checked', savedMetadataCompressCover);
             $('#metadata-write-artist').prop('checked', savedMetadataWriteArtist);
             $('#metadata-write-album').prop('checked', savedMetadataWriteAlbum);
             $('#metadata-write-track').prop('checked', savedMetadataWriteTrack);
@@ -2117,7 +2117,7 @@
                 ml_update_metadata_write_preview();
             });
 
-            $('#metadata-write-cover, #metadata-crop-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-track, #metadata-write-lyrics').on('change', function() {
+            $('#metadata-write-cover, #metadata-compress-cover, #metadata-write-artist, #metadata-write-album, #metadata-write-track, #metadata-write-lyrics').on('change', function() {
                 ml_update_metadata_write_ui_state();
                 ml_save_metadata_write_settings();
                 ml_update_metadata_write_preview();
@@ -2135,7 +2135,7 @@
                         localStorage.setItem('ml_filename_separator', DEFAULT_SEPARATOR);
                         localStorage.setItem('ml_metadata_write_enabled', DEFAULT_METADATA_WRITE_ENABLED);
                         localStorage.setItem('ml_metadata_write_cover', DEFAULT_METADATA_WRITE_COVER);
-                        localStorage.setItem('ml_metadata_crop_cover', DEFAULT_METADATA_CROP_COVER);
+                        localStorage.setItem('ml_metadata_compress_cover', DEFAULT_METADATA_COMPRESS_COVER);
                         localStorage.setItem('ml_metadata_write_artist', DEFAULT_METADATA_WRITE_ARTIST);
                         localStorage.setItem('ml_metadata_write_album', DEFAULT_METADATA_WRITE_ALBUM);
                         localStorage.setItem('ml_metadata_write_track', DEFAULT_METADATA_WRITE_TRACK);
@@ -2150,7 +2150,7 @@
                         $(`input[name="separator-type"][value="${DEFAULT_SEPARATOR}"]`).prop('checked', true);
                         $('#metadata-write-enabled').prop('checked', DEFAULT_METADATA_WRITE_ENABLED === 'true');
                         $('#metadata-write-cover').prop('checked', DEFAULT_METADATA_WRITE_COVER === 'true');
-                        $('#metadata-crop-cover').prop('checked', DEFAULT_METADATA_CROP_COVER === 'true');
+                        $('#metadata-compress-cover').prop('checked', DEFAULT_METADATA_COMPRESS_COVER === 'true');
                         $('#metadata-write-artist').prop('checked', DEFAULT_METADATA_WRITE_ARTIST === 'true');
                         $('#metadata-write-album').prop('checked', DEFAULT_METADATA_WRITE_ALBUM === 'true');
                         $('#metadata-write-track').prop('checked', DEFAULT_METADATA_WRITE_TRACK === 'true');
