@@ -658,10 +658,14 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
                         const originalCoverBuffer = await coverResponse.arrayBuffer();
                         const originalCoverMimeType = coverResponse.headers.get('Content-Type');
 
-                        // 调用图片压缩函数
-                        const compressedImageData = await compressImage(originalCoverBuffer, originalCoverMimeType, metadataWriteConfig.cropCover);
-                        coverBuffer = compressedImageData.buffer;
-                        coverMimeType = compressedImageData.mime;
+                        if (metadataWriteConfig.cropCover) {
+                            const compressedImageData = await compressImage(originalCoverBuffer, originalCoverMimeType, true);
+                            coverBuffer = compressedImageData.buffer;
+                            coverMimeType = compressedImageData.mime;
+                        } else {
+                            coverBuffer = originalCoverBuffer;
+                            coverMimeType = originalCoverMimeType;
+                        }
 
                         console.log("封面图片处理完成。");
                     }
