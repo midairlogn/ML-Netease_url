@@ -14,6 +14,9 @@ const ML_AUDIO_FETCH_TIMEOUT_BY_LEVEL_MS = {
     jymaster: 1800000
 };
 const ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS = 900000;
+const ML_BLOB_DOWNLOAD_HANDOFF_DELAY_MS = 10000;
+const ML_BLOB_DOWNLOAD_FOCUS_SETTLE_MS = 1000;
+let ml_browser_download_slot = Promise.resolve();
 
 function ml_create_timeout_signal(parentSignal, timeoutMs, message) {
     const controller = new AbortController();
@@ -834,29 +837,78 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
     }
 };
 
-function ml_trigger_blob_download(blob, fileName) {
+function ml_with_browser_download_slot(operation) {
+    const pendingOperation = ml_browser_download_slot.then(operation, operation);
+    ml_browser_download_slot = pendingOperation.catch(() => {});
+    return pendingOperation;
+}
+
+function ml_wait_for_browser_download_handoff() {
+    return new Promise(resolve => {
+        let didBlur = false;
+        let handoffTimer = null;
+        let focusTimer = null;
+
+        const cleanup = () => {
+            window.removeEventListener('blur', handleBlur);
+            window.removeEventListener('focus', handleFocus);
+            clearTimeout(handoffTimer);
+            clearTimeout(focusTimer);
+        };
+        const finish = () => {
+            cleanup();
+            resolve();
+        };
+        const handleBlur = () => {
+            didBlur = true;
+            clearTimeout(handoffTimer);
+        };
+        const handleFocus = () => {
+            if (didBlur && focusTimer === null) {
+                focusTimer = setTimeout(finish, ML_BLOB_DOWNLOAD_FOCUS_SETTLE_MS);
+            }
+        };
+
+        window.addEventListener('blur', handleBlur);
+        window.addEventListener('focus', handleFocus);
+        handoffTimer = setTimeout(finish, ML_BLOB_DOWNLOAD_HANDOFF_DELAY_MS);
+    });
+}
+
+async function ml_trigger_blob_download(blob, fileName) {
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
     a.download = fileName;
     document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-    console.log(`文件 "${fileName}" 已开始下载。`);
+    const handoffPromise = ml_wait_for_browser_download_handoff();
+
+    try {
+        a.click();
+        document.body.removeChild(a);
+        await handoffPromise;
+        console.log(`文件 "${fileName}" 已提交给浏览器下载。`);
+    } finally {
+        if (a.parentNode) {
+            a.parentNode.removeChild(a);
+        }
+        URL.revokeObjectURL(blobUrl);
+    }
 }
 
 // 定义下载函数
 async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
-    try {
-        const musicFile = await ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level, trackNumber, totalTracks, abortSignal);
-        ml_trigger_blob_download(musicFile.blob, musicFile.fileName);
-    } catch (error) {
-        if (error?.name !== 'AbortError') {
-            ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');
+    return ml_with_browser_download_slot(async () => {
+        try {
+            const musicFile = await ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level, trackNumber, totalTracks, abortSignal);
+            await ml_trigger_blob_download(musicFile.blob, musicFile.fileName);
+        } catch (error) {
+            if (error?.name !== 'AbortError') {
+                ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');
+            }
+            throw error;
         }
-        throw error;
-    }
+    });
 };
 
 // multi-songs download
