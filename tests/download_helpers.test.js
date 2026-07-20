@@ -223,6 +223,42 @@ test('FLAC building returns binary data without allocating a Blob', async () => 
     assert.equal(musicFile.fileName, 'song_artist_album.flac');
 });
 
+test('MP3 building returns the ID3 writer buffer without allocating a Blob', async () => {
+    const audioData = new Uint8Array([0x49, 0x44, 0x33, 0, 0, 0, 0, 0]).buffer;
+    const taggedData = new Uint8Array([0x49, 0x44, 0x33, 1, 2, 3, 4, 5]).buffer;
+    class FakeID3Writer {
+        setFrame() { return this; }
+        addTag() { this.arrayBuffer = taggedData; }
+        getBlob() { assert.fail('MP3 build must not create a Blob'); }
+    }
+    const context = loadScript('static/ml-func-plugins.js', {
+        AbortController,
+        Blob: class UnexpectedBlob {
+            constructor() { assert.fail('MP3 build must not create a Blob'); }
+        },
+        ID3Writer: FakeID3Writer,
+        fetch: async () => ({
+            ok: true,
+            async arrayBuffer() { return audioData; }
+        }),
+        localStorage: { getItem() { return null; } }
+    });
+
+    const musicFile = await context.ml_build_music_file(
+        'album',
+        'artist',
+        '',
+        'song',
+        '',
+        'https://example.test/song.mp3',
+        'standard'
+    );
+
+    assert.equal(musicFile.data, taggedData);
+    assert.equal(musicFile.mimeType, 'audio/mpeg');
+    assert.equal(musicFile.fileName, 'song_artist_album.mp3');
+});
+
 test('failed folder writes abort the writer, remove the partial file, and report the stage', async () => {
     const context = loadScript('static/ml-task-manager.js');
     let aborted = false;
