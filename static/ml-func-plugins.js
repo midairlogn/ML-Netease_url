@@ -690,7 +690,8 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
             }
         }
 
-        let taggedBlob;
+        let taggedData;
+        let mimeType;
         let fileName;
 
         if (audioFormat === 'mp3') {
@@ -734,7 +735,8 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
 
             // 写入标签
             writer.addTag();
-            taggedBlob = writer.getBlob();
+            taggedData = writer.arrayBuffer;
+            mimeType = 'audio/mpeg';
             fileName = `${customFilenameBase}.mp3`;
             console.log("ID3 标签添加完成。");
 
@@ -782,7 +784,8 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
                 }
 
                 writer.addTag();
-                taggedBlob = writer.getBlob();
+                taggedData = writer.arrayBuffer;
+                mimeType = 'audio/mpeg';
                 fileName = `${customFilenameBase}.mp3`;
                 console.log("已回退到 MP3 格式处理。");
             } else {
@@ -816,7 +819,8 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
 
                 // 写入标签
                 writer.addTag();
-                taggedBlob = writer.getBlob();
+                taggedData = writer.getArrayBuffer();
+                mimeType = 'audio/flac';
                 fileName = `${customFilenameBase}.flac`;
                 console.log("FLAC Vorbis 标签添加完成。");
             }
@@ -827,7 +831,8 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
         }
 
         return {
-            blob: taggedBlob,
+            data: taggedData,
+            mimeType: mimeType,
             fileName: fileName
         };
 
@@ -901,7 +906,8 @@ async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, u
     return ml_with_browser_download_slot(async () => {
         try {
             const musicFile = await ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level, trackNumber, totalTracks, abortSignal);
-            await ml_trigger_blob_download(musicFile.blob, musicFile.fileName);
+            const blob = new Blob([musicFile.data], { type: musicFile.mimeType });
+            await ml_trigger_blob_download(blob, musicFile.fileName);
         } catch (error) {
             if (error?.name !== 'AbortError') {
                 ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');

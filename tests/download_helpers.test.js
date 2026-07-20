@@ -28,6 +28,7 @@ function loadScripts(relativePaths, overrides = {}) {
         console,
         document: {},
         window: { addEventListener() {}, removeEventListener() {} },
+        Blob,
         DOMException,
         setTimeout,
         clearTimeout,
@@ -158,9 +159,11 @@ test('individual downloads acquire the browser slot before building a Blob', asy
         order.push(`${name}-build-start`);
         if (name === 'first') await firstBuildGate;
         order.push(`${name}-build-end`);
-        return { blob: { size: 1024 }, fileName: `${name}.flac` };
+        return { data: new Uint8Array(1024), mimeType: 'audio/flac', fileName: `${name}.flac` };
     };
-    context.ml_trigger_blob_download = async (_blob, fileName) => {
+    context.ml_trigger_blob_download = async (blob, fileName) => {
+        assert.equal(blob instanceof Blob, true);
+        assert.equal(blob.size, 1024);
         order.push(`${fileName}-trigger`);
     };
 
@@ -180,6 +183,44 @@ test('individual downloads acquire the browser slot before building a Blob', asy
         'second-build-end',
         'second.flac-trigger'
     ]);
+});
+
+test('FLAC building returns binary data without allocating a Blob', async () => {
+    const audioData = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 0, 0, 0, 0]).buffer;
+    const taggedData = new Uint8Array([0x66, 0x4c, 0x61, 0x43, 1, 2, 3, 4]).buffer;
+    class FakeFlacWriter {
+        setFrame() { return this; }
+        setPicture() { assert.fail('cover should not be written'); }
+        addTag() { return this; }
+        getArrayBuffer() { return taggedData; }
+        getBlob() { assert.fail('folder/ZIP build must not create a Blob'); }
+    }
+    const context = loadScript('static/ml-func-plugins.js', {
+        AbortController,
+        Blob: class UnexpectedBlob {
+            constructor() { assert.fail('FLAC build must not create a Blob'); }
+        },
+        FlacWriter: FakeFlacWriter,
+        fetch: async () => ({
+            ok: true,
+            async arrayBuffer() { return audioData; }
+        }),
+        localStorage: { getItem() { return null; } }
+    });
+
+    const musicFile = await context.ml_build_music_file(
+        'album',
+        'artist',
+        '',
+        'song',
+        '',
+        'https://example.test/song.flac',
+        'lossless'
+    );
+
+    assert.equal(musicFile.data, taggedData);
+    assert.equal(musicFile.mimeType, 'audio/flac');
+    assert.equal(musicFile.fileName, 'song_artist_album.flac');
 });
 
 test('failed folder writes abort the writer, remove the partial file, and report the stage', async () => {
@@ -207,7 +248,7 @@ test('failed folder writes abort the writer, remove the partial file, and report
     };
 
     await assert.rejects(
-        context.ml_write_blob_to_folder(folderHandle, 'song.flac', { size: 1024 }),
+        context.ml_write_data_to_folder(folderHandle, 'song.flac', new Uint8Array(1024)),
         (caught) => caught === error && caught.mlFolderWriteStage === 'write'
     );
     assert.equal(aborted, true);
@@ -226,7 +267,7 @@ test('folder handle acquisition failure does not delete an unrelated file', asyn
     };
 
     await assert.rejects(
-        context.ml_write_blob_to_folder(folderHandle, 'song.flac', { size: 1024 }),
+        context.ml_write_data_to_folder(folderHandle, 'song.flac', new Uint8Array(1024)),
         (caught) => caught === error && caught.mlFolderWriteStage === 'get-file-handle'
     );
     assert.equal(removeCalled, false);
@@ -262,11 +303,12 @@ test('only final per-song storage errors affect the failure alert classification
     assert.equal(storageFailures[0], storageFailedSong);
 });
 
-test('successful ZIP submission releases retained source Blobs', async () => {
+test('successful ZIP submission releases retained source buffers', async () => {
     const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js']);
     let submittedName = null;
+    const zippedFiles = [];
     context.JSZip = class FakeZip {
-        file() {}
+        file(name, data) { zippedFiles.push({ name, data }); }
         async generateAsync() { return { size: 2048 }; }
     };
     context.ml_with_browser_download_slot = operation => operation();
@@ -276,8 +318,8 @@ test('successful ZIP submission releases retained source Blobs', async () => {
     const task = {
         outputMode: 'zip',
         generatedFiles: [
-            { fileName: 'one.flac', blob: { size: 1024 } },
-            { fileName: 'two.flac', blob: { size: 1024 } }
+            { fileName: 'one.flac', data: new Uint8Array(1024) },
+            { fileName: 'two.flac', data: new Uint8Array(1024) }
         ],
         status: 'active',
         isPaused: false,
@@ -287,7 +329,63 @@ test('successful ZIP submission releases retained source Blobs', async () => {
     await context.ml_finish_zip_task(task);
 
     assert.equal(submittedName, 'Album.zip');
+    assert.deepEqual(zippedFiles.map(file => file.name), ['one.flac', 'two.flac']);
+    assert.equal(zippedFiles.every(file => file.data instanceof Uint8Array), true);
     assert.equal(task.generatedFiles.length, 0);
+});
+
+test('folder mode writes the tagged buffer without creating an intermediate Blob', async () => {
+    const context = loadScript('static/ml-task-manager.js');
+    const taggedData = new Uint8Array([1, 2, 3, 4]);
+    const writes = [];
+    let closed = false;
+    const folderHandle = {
+        async getFileHandle(name, options) {
+            assert.equal(name, 'song.flac');
+            if (!options.create) {
+                throw new DOMException('Missing', 'NotFoundError');
+            }
+            return {
+                async createWritable() {
+                    return {
+                        async write(data) { writes.push(data); },
+                        async close() { closed = true; },
+                        async abort() {}
+                    };
+                }
+            };
+        },
+        async removeEntry() {}
+    };
+    context.ml_build_music_file = async () => ({
+        data: taggedData,
+        mimeType: 'audio/flac',
+        fileName: 'song.flac'
+    });
+
+    await context.ml_save_task_music_file({
+        outputMode: 'folder',
+        folderHandle,
+        usedFileNames: new Set(),
+        status: 'active',
+        isPaused: false,
+        level: 'lossless',
+        abortController: null
+    }, {
+        al_name: '',
+        ar_name: '',
+        name: 'song',
+        pic: '',
+        url: ''
+    }, '', {
+        trackNumber: 1,
+        totalTracks: 1
+    });
+
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0], taggedData);
+    assert.equal(writes[0] instanceof Blob, false);
+    assert.equal(closed, true);
 });
 
 test('a recovered storage retry does not classify another song network failure as storage', async () => {

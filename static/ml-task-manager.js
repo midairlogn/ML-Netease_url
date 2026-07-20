@@ -511,7 +511,7 @@ async function ml_get_unique_folder_file_name(folderHandle, fileName, usedFileNa
     }
 }
 
-async function ml_write_blob_to_folder(folderHandle, fileName, blob) {
+async function ml_write_data_to_folder(folderHandle, fileName, data) {
     let writable = null;
     let stage = 'get-file-handle';
     let fileHandleAcquired = false;
@@ -522,7 +522,7 @@ async function ml_write_blob_to_folder(folderHandle, fileName, blob) {
         stage = 'create-writable';
         writable = await fileHandle.createWritable();
         stage = 'write';
-        await writable.write(blob);
+        await writable.write(data);
         stage = 'close';
         await writable.close();
         writable = null;
@@ -760,7 +760,7 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
 
     if (task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
         const fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
-        task.generatedFiles.push({ fileName: fileName, blob: musicFile.blob });
+        task.generatedFiles.push({ fileName: fileName, data: musicFile.data });
         return;
     }
 
@@ -772,7 +772,7 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
         let fileName = null;
         try {
             fileName = await ml_get_unique_folder_file_name(task.folderHandle, musicFile.fileName, task.usedFileNames);
-            await ml_write_blob_to_folder(task.folderHandle, fileName, musicFile.blob);
+            await ml_write_data_to_folder(task.folderHandle, fileName, musicFile.data);
         } catch (error) {
             if (!ml_is_folder_write_blocked_error(error)) {
                 if (fileName) {
@@ -783,7 +783,7 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
 
             task.outputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
             task.folderHandle = null;
-            task.generatedFiles.push({ fileName: fileName || ml_get_unique_file_name(musicFile.fileName, task.usedFileNames), blob: musicFile.blob });
+            task.generatedFiles.push({ fileName: fileName || ml_get_unique_file_name(musicFile.fileName, task.usedFileNames), data: musicFile.data });
 
             if (!task.folderFallbackNotified) {
                 task.folderFallbackNotified = true;
@@ -806,7 +806,7 @@ async function ml_finish_zip_task(task) {
 
     const zip = new JSZip();
     task.generatedFiles.forEach(file => {
-        zip.file(file.fileName, file.blob);
+        zip.file(file.fileName, file.data);
     });
 
     let submitted = false;
