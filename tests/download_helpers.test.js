@@ -84,7 +84,7 @@ test('blob download URL remains valid until the cleanup timer runs', () => {
     assert.equal(removed, true);
     assert.deepEqual(revokedUrls, []);
     assert.equal(timers.length, 1);
-    assert.equal(timers[0].delay, 10000);
+    assert.equal(timers[0].delay, 300000);
 
     timers[0].callback();
     assert.deepEqual(revokedUrls, ['blob:test-download']);
@@ -147,4 +147,89 @@ test('browser-managed and direct-folder tasks use different completion semantics
     assert.equal(context.ml_task_uses_browser_download({ type: 'single', outputMode: 'individual' }), true);
     assert.equal(context.ml_task_uses_browser_download({ type: 'batch', outputMode: 'zip' }), true);
     assert.equal(context.ml_task_uses_browser_download({ type: 'batch', outputMode: 'folder' }), false);
+});
+
+test('only final per-song storage errors affect the failure alert classification', () => {
+    const context = loadScript('static/ml-task-manager.js');
+    const recoveredSong = { id: 1 };
+    const networkFailedSong = { id: 2 };
+    const storageFailedSong = { id: 3 };
+    const errors = new Map();
+
+    errors.set(recoveredSong, new DOMException('Could not read file', 'NotReadableError'));
+    errors.delete(recoveredSong);
+    errors.set(networkFailedSong, new TypeError('Failed to fetch'));
+    errors.set(storageFailedSong, new DOMException('Disk quota exceeded', 'QuotaExceededError'));
+
+    const storageFailures = context.ml_get_storage_failed_songs({
+        failedSongs: [networkFailedSong, storageFailedSong],
+        songFailureErrors: errors
+    });
+
+    assert.equal(storageFailures.length, 1);
+    assert.equal(storageFailures[0], storageFailedSong);
+});
+
+test('a recovered storage retry does not classify another song network failure as storage', async () => {
+    const context = loadScript('static/ml-task-manager.js', {
+        console: { log() {}, warn() {}, error() {} }
+    });
+    const recoveredSong = { id: 1, name: 'Recovered' };
+    const networkFailedSong = { id: 2, name: 'Network failure' };
+    const attempts = new Map();
+    const alerts = [];
+
+    context.ml_max_try_times = 2;
+    context.ml_get_concurrent_count = () => 1;
+    context.ml_update_task_item = () => {};
+    context.ml_show_Alert = (...args) => alerts.push(args);
+    context.ml_sanitize_lrc_timestamps = lyrics => lyrics;
+    context.ml_resolve_lrc_timestamp_conflicts = lyrics => lyrics;
+    context.ml_fetch_task_song_info = async () => ({
+        status: 200,
+        lyric: '',
+        tlyric: '',
+        al_name: '',
+        ar_name: '',
+        name: '',
+        pic: '',
+        url: ''
+    });
+    context.ml_save_task_music_file = async (_task, _response, _lyrics, song) => {
+        const attempt = (attempts.get(song) || 0) + 1;
+        attempts.set(song, attempt);
+        if (song === recoveredSong && attempt === 1) {
+            throw new DOMException('Could not read file', 'NotReadableError');
+        }
+        if (song === networkFailedSong) {
+            throw new TypeError('Failed to fetch');
+        }
+    };
+
+    const task = {
+        id: 10,
+        songs: [recoveredSong, networkFailedSong],
+        remainingSongs: null,
+        totalCount: 2,
+        completedCount: 0,
+        successCount: 0,
+        failedCount: 0,
+        failedSongs: [],
+        progress: 0,
+        outputMode: 'individual',
+        generatedFiles: [],
+        songFailureErrors: new Map(),
+        status: 'active',
+        isPaused: false,
+        abortController: null
+    };
+
+    await context.ml_execute_batch_task(task);
+
+    assert.equal(task.successCount, 1);
+    assert.equal(task.failedCount, 1);
+    assert.equal(task.failedSongs[0], networkFailedSong);
+    assert.equal(task.songFailureErrors.has(recoveredSong), false);
+    assert.equal(task.songFailureErrors.get(networkFailedSong).name, 'TypeError');
+    assert.equal(alerts.length, 0);
 });

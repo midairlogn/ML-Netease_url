@@ -106,8 +106,7 @@ function ml_create_task(options) {
         generatedFiles: [],
         usedFileNames: new Set(),
         folderFallbackNotified: false,
-        storageFailureCount: 0,
-        lastStorageError: null,
+        songFailureErrors: new Map(),
 
         // State management
         isPaused: false,
@@ -389,6 +388,10 @@ function ml_is_storage_io_error(error) {
         error?.name === 'QuotaExceededError' ||
         error?.name === 'UnknownError' ||
         /disk|space|quota|swap file|could not be read|file operation|i\/o/i.test(error?.message || '');
+}
+
+function ml_get_storage_failed_songs(task) {
+    return task.failedSongs.filter(song => ml_is_storage_io_error(task.songFailureErrors.get(song)));
 }
 
 async function ml_verify_directory_writable(directoryHandle) {
@@ -870,15 +873,15 @@ async function ml_execute_batch_task(task) {
 
                     task.completedCount++;
                     task.successCount++;
+                    task.songFailureErrors.delete(song);
                 } catch (error) {
                     if (task.status === ML_TASK_STATUS.CANCELLED || error?.name === 'AbortError') {
                         cancelledSongs.push(song);
                         return;
                     }
 
+                    task.songFailureErrors.set(song, error);
                     if (ml_is_storage_io_error(error)) {
-                        task.storageFailureCount++;
-                        task.lastStorageError = error;
                         console.warn(`Task ${task.id}: browser storage failed during ${error.mlFolderWriteStage || 'file processing'}.`, error);
                     }
 
@@ -924,10 +927,16 @@ async function ml_execute_batch_task(task) {
     task.progress = (task.completedCount / task.totalCount) * 100;
     task.remainingSongs = [];
 
-    if (task.failedSongs.length > 0 && task.storageFailureCount > 0) {
+    const storageFailedSongs = ml_get_storage_failed_songs(task);
+    if (storageFailedSongs.length > 0) {
+        const failedNames = task.failedSongs.map(song => song.name || song.id).join('\n');
+        const zipNotice = task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.generatedFiles.length > 0 ?
+            `ZIP压缩包只包含已成功下载的 ${task.successCount} 首歌曲。\n\n` : '';
+        const otherFailedCount = task.failedCount - storageFailedSongs.length;
+        const otherFailureNotice = otherFailedCount > 0 ? `另有 ${otherFailedCount} 首因其他原因失败。\n\n` : '';
         ml_show_Alert(
-            '浏览器存储失败',
-            `有 ${task.failedCount} 首歌曲在写入浏览器临时存储或目标文件夹时失败。请释放系统盘和目标磁盘空间、降低同时下载数后重试。`,
+            otherFailedCount > 0 ? '部分歌曲下载失败' : '浏览器存储失败',
+            `${zipNotice}有 ${storageFailedSongs.length} 首歌曲在写入浏览器临时存储或目标文件夹时失败。${otherFailureNotice}请释放系统盘和目标磁盘空间、降低同时下载数后重试。\n\n${failedNames}`,
             'error'
         );
     } else if (task.failedSongs.length > 0 && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.generatedFiles.length > 0) {

@@ -14,7 +14,7 @@ const ML_AUDIO_FETCH_TIMEOUT_BY_LEVEL_MS = {
     jymaster: 1800000
 };
 const ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS = 900000;
-const ML_BLOB_URL_REVOKE_DELAY_MS = 10000;
+const ML_BLOB_URL_REVOKE_DELAY_MS = 300000;
 
 function ml_create_timeout_signal(parentSignal, timeoutMs, message) {
     const controller = new AbortController();
