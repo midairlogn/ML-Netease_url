@@ -23,25 +23,32 @@ function createJQueryStub() {
     };
 }
 
-function loadScript(relativePath, overrides = {}) {
+function loadScripts(relativePaths, overrides = {}) {
     const context = vm.createContext({
         console,
         document: {},
-        window: { addEventListener() {} },
+        window: { addEventListener() {}, removeEventListener() {} },
         DOMException,
         setTimeout,
         clearTimeout,
         $: createJQueryStub(),
         ...overrides
     });
-    const source = fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
-    vm.runInContext(source, context, { filename: relativePath });
+    for (const relativePath of relativePaths) {
+        const source = fs.readFileSync(path.join(projectRoot, relativePath), 'utf8');
+        vm.runInContext(source, context, { filename: relativePath });
+    }
     return context;
 }
 
-test('blob download URL remains valid until the cleanup timer runs', () => {
+function loadScript(relativePath, overrides = {}) {
+    return loadScripts([relativePath], overrides);
+}
+
+test('blob download URL remains valid until the browser handoff timer runs', async () => {
     const timers = [];
     const revokedUrls = [];
+    const listeners = {};
     let clicked = false;
     let appended = false;
     let removed = false;
@@ -69,13 +76,20 @@ test('blob download URL remains valid until the cleanup timer runs', () => {
                 }
             }
         },
+        window: {
+            addEventListener(type, listener) { listeners[type] = listener; },
+            removeEventListener(type, listener) {
+                if (listeners[type] === listener) delete listeners[type];
+            }
+        },
         setTimeout(callback, delay) {
             timers.push({ callback, delay });
             return timers.length;
-        }
+        },
+        clearTimeout() {}
     });
 
-    context.ml_trigger_blob_download({ size: 1024 }, 'song.flac');
+    const downloadPromise = context.ml_trigger_blob_download({ size: 1024 }, 'song.flac');
 
     assert.equal(anchor.href, 'blob:test-download');
     assert.equal(anchor.download, 'song.flac');
@@ -84,10 +98,88 @@ test('blob download URL remains valid until the cleanup timer runs', () => {
     assert.equal(removed, true);
     assert.deepEqual(revokedUrls, []);
     assert.equal(timers.length, 1);
-    assert.equal(timers[0].delay, 300000);
+    assert.equal(timers[0].delay, 10000);
 
     timers[0].callback();
+    await downloadPromise;
     assert.deepEqual(revokedUrls, ['blob:test-download']);
+});
+
+test('Save As handoff waits for window focus before revoking the Blob URL', async () => {
+    const listeners = {};
+    const timers = [];
+    const revokedUrls = [];
+    const context = loadScript('static/ml-func-plugins.js', {
+        URL: {
+            createObjectURL() { return 'blob:save-as'; },
+            revokeObjectURL(url) { revokedUrls.push(url); }
+        },
+        document: {
+            createElement() { return { click() {} }; },
+            body: { appendChild() {}, removeChild() {} }
+        },
+        window: {
+            addEventListener(type, listener) { listeners[type] = listener; },
+            removeEventListener(type, listener) {
+                if (listeners[type] === listener) delete listeners[type];
+            }
+        },
+        setTimeout(callback, delay) {
+            const timer = { callback, delay, cancelled: false };
+            timers.push(timer);
+            return timer;
+        },
+        clearTimeout(timer) {
+            if (timer) timer.cancelled = true;
+        }
+    });
+
+    const downloadPromise = context.ml_trigger_blob_download({ size: 1024 }, 'song.flac');
+    listeners.blur();
+
+    assert.equal(timers[0].cancelled, true);
+    assert.deepEqual(revokedUrls, []);
+
+    listeners.focus();
+    assert.equal(timers[1].delay, 1000);
+    timers[1].callback();
+    await downloadPromise;
+
+    assert.deepEqual(revokedUrls, ['blob:save-as']);
+});
+
+test('individual downloads acquire the browser slot before building a Blob', async () => {
+    const context = loadScript('static/ml-func-plugins.js');
+    const order = [];
+    let releaseFirstBuild;
+    const firstBuildGate = new Promise(resolve => { releaseFirstBuild = resolve; });
+
+    context.ml_build_music_file = async (_album, _artist, _lyrics, name) => {
+        order.push(`${name}-build-start`);
+        if (name === 'first') await firstBuildGate;
+        order.push(`${name}-build-end`);
+        return { blob: { size: 1024 }, fileName: `${name}.flac` };
+    };
+    context.ml_trigger_blob_download = async (_blob, fileName) => {
+        order.push(`${fileName}-trigger`);
+    };
+
+    const first = context.ml_music_download('', '', '', 'first', '', '');
+    const second = context.ml_music_download('', '', '', 'second', '', '');
+
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(order, ['first-build-start']);
+
+    releaseFirstBuild();
+    await Promise.all([first, second]);
+    assert.deepEqual(order, [
+        'first-build-start',
+        'first-build-end',
+        'first.flac-trigger',
+        'second-build-start',
+        'second-build-end',
+        'second.flac-trigger'
+    ]);
 });
 
 test('failed folder writes abort the writer, remove the partial file, and report the stage', async () => {
@@ -170,8 +262,36 @@ test('only final per-song storage errors affect the failure alert classification
     assert.equal(storageFailures[0], storageFailedSong);
 });
 
+test('successful ZIP submission releases retained source Blobs', async () => {
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js']);
+    let submittedName = null;
+    context.JSZip = class FakeZip {
+        file() {}
+        async generateAsync() { return { size: 2048 }; }
+    };
+    context.ml_with_browser_download_slot = operation => operation();
+    context.ml_trigger_blob_download = async (_blob, fileName) => {
+        submittedName = fileName;
+    };
+    const task = {
+        outputMode: 'zip',
+        generatedFiles: [
+            { fileName: 'one.flac', blob: { size: 1024 } },
+            { fileName: 'two.flac', blob: { size: 1024 } }
+        ],
+        status: 'active',
+        isPaused: false,
+        collectionName: 'Album'
+    };
+
+    await context.ml_finish_zip_task(task);
+
+    assert.equal(submittedName, 'Album.zip');
+    assert.equal(task.generatedFiles.length, 0);
+});
+
 test('a recovered storage retry does not classify another song network failure as storage', async () => {
-    const context = loadScript('static/ml-task-manager.js', {
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js'], {
         console: { log() {}, warn() {}, error() {} }
     });
     const recoveredSong = { id: 1, name: 'Recovered' };
@@ -179,7 +299,6 @@ test('a recovered storage retry does not classify another song network failure a
     const attempts = new Map();
     const alerts = [];
 
-    context.ml_max_try_times = 2;
     context.ml_get_concurrent_count = () => 1;
     context.ml_update_task_item = () => {};
     context.ml_show_Alert = (...args) => alerts.push(args);
@@ -231,5 +350,7 @@ test('a recovered storage retry does not classify another song network failure a
     assert.equal(task.failedSongs[0], networkFailedSong);
     assert.equal(task.songFailureErrors.has(recoveredSong), false);
     assert.equal(task.songFailureErrors.get(networkFailedSong).name, 'TypeError');
+    assert.equal(attempts.get(recoveredSong), 2);
+    assert.equal(attempts.get(networkFailedSong), 5);
     assert.equal(alerts.length, 0);
 });

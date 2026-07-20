@@ -809,12 +809,20 @@ async function ml_finish_zip_task(task) {
         zip.file(file.fileName, file.blob);
     });
 
-    const zipBlob = await zip.generateAsync({ type: 'blob' });
-    if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
-        return;
-    }
+    let submitted = false;
+    await ml_with_browser_download_slot(async () => {
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
+            return;
+        }
 
-    ml_trigger_blob_download(zipBlob, `${ml_sanitize_path_segment(task.collectionName || task.title || 'download')}.zip`);
+        await ml_trigger_blob_download(zipBlob, `${ml_sanitize_path_segment(task.collectionName || task.title || 'download')}.zip`);
+        submitted = true;
+    });
+
+    if (submitted) {
+        task.generatedFiles = [];
+    }
 }
 
 /**
