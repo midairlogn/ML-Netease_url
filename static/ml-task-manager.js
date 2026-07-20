@@ -106,6 +106,8 @@ function ml_create_task(options) {
         generatedFiles: [],
         usedFileNames: new Set(),
         folderFallbackNotified: false,
+        storageFailureCount: 0,
+        lastStorageError: null,
 
         // State management
         isPaused: false,
@@ -225,6 +227,10 @@ async function ml_add_batch_task(songs, title, description, cover, level, option
 function ml_get_collection_download_mode() {
     const mode = localStorage.getItem('ml_collection_download_mode') || ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
     return Object.values(ML_COLLECTION_DOWNLOAD_MODE).includes(mode) ? mode : ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+}
+
+function ml_task_uses_browser_download(task) {
+    return task.type === ML_TASK_TYPE.SINGLE || task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.FOLDER;
 }
 
 async function ml_prompt_collection_download_name(defaultName, outputMode) {
@@ -370,10 +376,19 @@ async function ml_ensure_directory_write_permission(directoryHandle) {
 }
 
 function ml_is_folder_write_blocked_error(error) {
+    if (ml_is_storage_io_error(error)) return false;
+
     return error?.name === 'NotAllowedError' ||
         error?.name === 'SecurityError' ||
         error?.name === 'AbortError' ||
         /system file|permission|denied|not allowed|security/i.test(error?.message || '');
+}
+
+function ml_is_storage_io_error(error) {
+    return error?.name === 'NotReadableError' ||
+        error?.name === 'QuotaExceededError' ||
+        error?.name === 'UnknownError' ||
+        /disk|space|quota|swap file|could not be read|file operation|i\/o/i.test(error?.message || '');
 }
 
 async function ml_verify_directory_writable(directoryHandle) {
@@ -490,6 +505,49 @@ async function ml_get_unique_folder_file_name(folderHandle, fileName, usedFileNa
         }
 
         index++;
+    }
+}
+
+async function ml_write_blob_to_folder(folderHandle, fileName, blob) {
+    let writable = null;
+    let stage = 'get-file-handle';
+    let fileHandleAcquired = false;
+
+    try {
+        const fileHandle = await folderHandle.getFileHandle(fileName, { create: true });
+        fileHandleAcquired = true;
+        stage = 'create-writable';
+        writable = await fileHandle.createWritable();
+        stage = 'write';
+        await writable.write(blob);
+        stage = 'close';
+        await writable.close();
+        writable = null;
+    } catch (error) {
+        if (writable && typeof writable.abort === 'function') {
+            try {
+                await writable.abort();
+            } catch (abortError) {
+                console.warn(`Failed to abort folder writer for ${fileName}:`, abortError);
+            }
+        }
+
+        if (fileHandleAcquired && typeof folderHandle.removeEntry === 'function') {
+            try {
+                await folderHandle.removeEntry(fileName);
+            } catch (removeError) {
+                if (removeError?.name !== 'NotFoundError') {
+                    console.warn(`Failed to remove incomplete folder file ${fileName}:`, removeError);
+                }
+            }
+        }
+
+        try {
+            error.mlFolderWriteStage = stage;
+        } catch (_) {
+            // Some browser-provided DOMException objects are not extensible.
+        }
+        throw error;
     }
 }
 
@@ -711,12 +769,12 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
         let fileName = null;
         try {
             fileName = await ml_get_unique_folder_file_name(task.folderHandle, musicFile.fileName, task.usedFileNames);
-            const fileHandle = await task.folderHandle.getFileHandle(fileName, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(musicFile.blob);
-            await writable.close();
+            await ml_write_blob_to_folder(task.folderHandle, fileName, musicFile.blob);
         } catch (error) {
             if (!ml_is_folder_write_blocked_error(error)) {
+                if (fileName) {
+                    task.usedFileNames.delete(fileName);
+                }
                 throw error;
             }
 
@@ -818,6 +876,12 @@ async function ml_execute_batch_task(task) {
                         return;
                     }
 
+                    if (ml_is_storage_io_error(error)) {
+                        task.storageFailureCount++;
+                        task.lastStorageError = error;
+                        console.warn(`Task ${task.id}: browser storage failed during ${error.mlFolderWriteStage || 'file processing'}.`, error);
+                    }
+
                     console.warn(`Task ${task.id}: song ${song.id || song.name || 'unknown'} failed, will retry if attempts remain.`, error);
                     currentRoundFailed.push(song);
                 }
@@ -860,7 +924,13 @@ async function ml_execute_batch_task(task) {
     task.progress = (task.completedCount / task.totalCount) * 100;
     task.remainingSongs = [];
 
-    if (task.failedSongs.length > 0 && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.generatedFiles.length > 0) {
+    if (task.failedSongs.length > 0 && task.storageFailureCount > 0) {
+        ml_show_Alert(
+            '浏览器存储失败',
+            `有 ${task.failedCount} 首歌曲在写入浏览器临时存储或目标文件夹时失败。请释放系统盘和目标磁盘空间、降低同时下载数后重试。`,
+            'error'
+        );
+    } else if (task.failedSongs.length > 0 && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.generatedFiles.length > 0) {
         const failedNames = task.failedSongs.map(song => song.name || song.id).join('\n');
         ml_show_Alert('部分歌曲下载失败', `ZIP压缩包只包含已成功下载的 ${task.successCount} 首歌曲。\n失败: ${task.failedCount} 首\n\n${failedNames}`, 'warning');
     }
@@ -1153,7 +1223,7 @@ function ml_create_task_item_html(task) {
         let statusClass = '';
         let statusIcon = '';
         if (task.status === ML_TASK_STATUS.COMPLETED) {
-            statusText = '完成';
+            statusText = ml_task_uses_browser_download(task) ? '已提交' : '完成';
             statusClass = 'bg-success';
             statusIcon = '<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"/></svg>';
         } else if (task.status === ML_TASK_STATUS.FAILED) {
@@ -1422,6 +1492,14 @@ function ml_create_toast_html(toast) {
             </svg>`;
             typeText = '已完成';
             break;
+        case 'submitted':
+            typeClass = 'toast-completed';
+            typeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+            </svg>`;
+            typeText = '已提交下载';
+            break;
         case 'search':
             typeClass = 'toast-search';
             typeIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -1551,12 +1629,15 @@ function ml_show_task_started_toast(task) {
  * 显示任务完成通知
  */
 function ml_show_task_completed_toast(task) {
+    const usesBrowserDownload = ml_task_uses_browser_download(task);
     ml_show_toast({
-        type: 'completed',
+        type: usesBrowserDownload ? 'submitted' : 'completed',
         title: task.title,
-        subtitle: task.type === ML_TASK_TYPE.BATCH ?
-            `${task.successCount}/${task.totalCount} 首歌曲下载完成` :
-            task.subtitle,
+        subtitle: usesBrowserDownload ?
+            (task.type === ML_TASK_TYPE.BATCH ?
+                `${task.successCount}/${task.totalCount} 首歌曲已提交，请在浏览器下载列表确认` :
+                '已提交，请在浏览器下载列表确认') :
+            `${task.successCount}/${task.totalCount} 首歌曲已写入文件夹`,
         cover: task.cover
     });
 }

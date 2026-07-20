@@ -14,6 +14,7 @@ const ML_AUDIO_FETCH_TIMEOUT_BY_LEVEL_MS = {
     jymaster: 1800000
 };
 const ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS = 900000;
+const ML_BLOB_URL_REVOKE_DELAY_MS = 10000;
 
 function ml_create_timeout_signal(parentSignal, timeoutMs, message) {
     const controller = new AbortController();
@@ -842,8 +843,11 @@ function ml_trigger_blob_download(blob, fileName) {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(blobUrl);
-    console.log(`文件 "${fileName}" 已开始下载。`);
+
+    // Chromium acquires large Blob downloads asynchronously. Revoking the URL
+    // in the same turn can make the browser report a network/read failure.
+    setTimeout(() => URL.revokeObjectURL(blobUrl), ML_BLOB_URL_REVOKE_DELAY_MS);
+    console.log(`文件 "${fileName}" 已提交给浏览器下载。`);
 }
 
 // 定义下载函数
