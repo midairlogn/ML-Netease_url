@@ -108,6 +108,7 @@ function ml_create_task(options) {
         zipWriter: null,
         zipAbortController: null,
         zipEntryCount: 0,
+        zipFinalizing: false,
         zipFinalized: false,
         zipAborted: false,
         zipFailureNotified: false,
@@ -624,7 +625,8 @@ function ml_create_zip_write_error(error, message) {
 }
 
 async function ml_prepare_streaming_zip_task(task) {
-    if (task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.ZIP || task.zipWriter) {
+    if (task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.ZIP || task.zipWriter ||
+        task.zipFinalizing || task.zipFinalized || task.zipAborted) {
         return;
     }
     if (!ml_is_streaming_zip_supported() || !task.zipFileHandle) {
@@ -714,6 +716,7 @@ async function ml_finish_zip_task(task) {
         return;
     }
 
+    task.zipFinalizing = true;
     try {
         await task.zipWriter.close();
         task.zipFinalized = true;
@@ -723,6 +726,8 @@ async function ml_finish_zip_task(task) {
     } catch (error) {
         await ml_abort_streaming_zip_task(task);
         throw ml_create_zip_write_error(error, 'Unable to finalize the streaming ZIP archive');
+    } finally {
+        task.zipFinalizing = false;
     }
 }
 
@@ -823,6 +828,10 @@ async function ml_start_task(task) {
             await ml_prepare_streaming_zip_task(task);
         }
 
+        if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
+            return;
+        }
+
         if (task.type === ML_TASK_TYPE.SINGLE) {
             await ml_execute_single_task(task);
         } else {
@@ -846,6 +855,7 @@ async function ml_start_task(task) {
             ml_mark_zip_output_failed(task);
             ml_show_zip_output_failure(task);
             ml_show_task_failed_toast(task);
+            task.status = ML_TASK_STATUS.FAILED;
         }
         if (task.status === ML_TASK_STATUS.ACTIVE) {
             task.status = ML_TASK_STATUS.FAILED;
@@ -1193,7 +1203,8 @@ function ml_pause_task(taskId) {
     if (task.status === ML_TASK_STATUS.PAUSED ||
         task.status === ML_TASK_STATUS.COMPLETED ||
         task.status === ML_TASK_STATUS.FAILED ||
-        task.status === ML_TASK_STATUS.CANCELLED) return;
+        task.status === ML_TASK_STATUS.CANCELLED ||
+        task.zipFinalizing) return;
 
     task.isPaused = true;
     task.status = ML_TASK_STATUS.PAUSED;

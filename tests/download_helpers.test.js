@@ -927,6 +927,139 @@ test('pausing and resuming a ZIP batch preserves the open writer', async () => {
     assert.equal(finalizedWriter, writer);
 });
 
+test('pausing during ZIP initialization preserves the untouched song queue', async () => {
+    let resolveWritable;
+    let markCreateWritableStarted;
+    const createWritableStarted = new Promise(resolve => {
+        markCreateWritableStarted = resolve;
+    });
+    class FakeZipWriter {}
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: FakeZipWriter, Uint8ArrayReader: class {} },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            showSaveFilePicker() {}
+        },
+        console: { log() {}, warn() {}, error() {} }
+    });
+    let executeCalls = 0;
+    context.ml_execute_batch_task = async () => { executeCalls++; };
+    context.ml_update_task_panel = () => {};
+    context.ml_update_task_badge = () => {};
+    context.ml_show_task_started_toast = () => {};
+    context.ml_show_task_paused_toast = () => {};
+    context.ml_process_task_queue = () => {};
+    const songs = [{ id: 1 }, { id: 2 }];
+    const writable = { async abort() {} };
+    const task = {
+        id: 23,
+        type: 'batch',
+        status: 'waiting',
+        songs,
+        totalCount: songs.length,
+        completedCount: 0,
+        successCount: 0,
+        failedCount: 0,
+        failedSongs: [],
+        progress: 0,
+        outputMode: 'zip',
+        zipFileHandle: {
+            createWritable() {
+                markCreateWritableStarted();
+                return new Promise(resolve => { resolveWritable = resolve; });
+            }
+        },
+        zipWritable: null,
+        zipWriter: null,
+        zipAbortController: null,
+        zipEntryCount: 0,
+        zipFinalizing: false,
+        zipFinalized: false,
+        zipAborted: false,
+        zipFailureNotified: false,
+        remainingSongs: null,
+        isPaused: false,
+        abortController: null
+    };
+    context.ml_task_manager.tasks = [task];
+
+    const startPromise = context.ml_start_task(task);
+    await createWritableStarted;
+    context.ml_pause_task(task.id);
+    resolveWritable(writable);
+    await startPromise;
+
+    assert.equal(task.status, 'paused');
+    assert.equal(task.isPaused, true);
+    assert.equal(task.remainingSongs, null);
+    assert.equal(task.failedCount, 0);
+    assert.equal(task.failedSongs.length, 0);
+    assert.equal(task.zipWriter instanceof FakeZipWriter, true);
+    assert.equal(executeCalls, 0);
+
+    await context.ml_abort_streaming_zip_task(task);
+});
+
+test('ZIP finalization cannot be paused or reopened after close', async () => {
+    let resolveClose;
+    let markCloseStarted;
+    const closeStarted = new Promise(resolve => {
+        markCloseStarted = resolve;
+    });
+    let createWritableCalls = 0;
+    let pausedToasts = 0;
+    const context = loadScript('static/ml-task-manager.js');
+    context.ml_update_task_panel = () => {};
+    context.ml_update_task_badge = () => {};
+    context.ml_show_task_paused_toast = () => { pausedToasts++; };
+    context.ml_process_task_queue = () => {};
+    const task = {
+        id: 24,
+        outputMode: 'zip',
+        status: 'active',
+        isPaused: false,
+        zipFileHandle: {
+            async createWritable() {
+                createWritableCalls++;
+                return { async abort() {} };
+            }
+        },
+        zipWriter: {
+            close() {
+                markCloseStarted();
+                return new Promise(resolve => { resolveClose = resolve; });
+            }
+        },
+        zipWritable: { async abort() {} },
+        zipAbortController: new AbortController(),
+        zipEntryCount: 1,
+        zipFinalizing: false,
+        zipFinalized: false,
+        zipAborted: false,
+        abortController: new AbortController()
+    };
+    context.ml_task_manager.tasks = [task];
+
+    const finishPromise = context.ml_finish_zip_task(task);
+    await closeStarted;
+    assert.equal(task.zipFinalizing, true);
+
+    context.ml_pause_task(task.id);
+    assert.equal(task.status, 'active');
+    assert.equal(task.isPaused, false);
+    assert.equal(pausedToasts, 0);
+
+    resolveClose();
+    await finishPromise;
+    assert.equal(task.zipFinalizing, false);
+    assert.equal(task.zipFinalized, true);
+
+    await context.ml_prepare_streaming_zip_task(task);
+    assert.equal(createWritableCalls, 0);
+    assert.equal(task.zipWriter, null);
+});
+
 test('ZIP initialization failure marks the task failed and runs cleanup', async () => {
     const alerts = [];
     const failedToasts = [];
@@ -967,6 +1100,7 @@ test('ZIP initialization failure marks the task failed and runs cleanup', async 
         zipWriter: null,
         zipAbortController: null,
         zipEntryCount: 0,
+        zipFinalizing: false,
         zipFinalized: false,
         zipAborted: false,
         zipFailureNotified: false,
