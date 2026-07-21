@@ -922,6 +922,11 @@ async function ml_execute_batch_task(task) {
                         return;
                     }
 
+                    if (task.status === ML_TASK_STATUS.PAUSED || task.isPaused) {
+                        cancelledSongs.push(song);
+                        return;
+                    }
+
                     if (error?.mlPartialFolderOutput) {
                         task.fatalError = error;
                         currentRoundFailed.push(song);

@@ -473,6 +473,83 @@ test('batch execution stops after partial folder output loses permission', async
     assert.equal(alerts[0][0], '文件夹下载中断');
 });
 
+test('pausing during a blocked folder write preserves songs for resume', async () => {
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js'], {
+        console: { log() {}, warn() {}, error() {} }
+    });
+    const blockedSong = { id: 2, name: 'Blocked' };
+    const unstartedSong = { id: 3, name: 'Unstarted' };
+    const savedSongs = [];
+    const alerts = [];
+    const error = new Error('Folder write permission was lost after files were written');
+    error.name = 'FolderOutputBlockedError';
+    error.mlPartialFolderOutput = true;
+    let shouldPause = true;
+
+    context.ml_get_concurrent_count = () => 3;
+    context.ml_update_task_item = () => {};
+    context.ml_update_task_panel = () => {};
+    context.ml_show_Alert = (...args) => alerts.push(args);
+    context.ml_sanitize_lrc_timestamps = lyrics => lyrics;
+    context.ml_resolve_lrc_timestamp_conflicts = lyrics => lyrics;
+    context.ml_fetch_task_song_info = async songId => ({
+        status: 200,
+        lyric: '',
+        tlyric: '',
+        al_name: '',
+        ar_name: '',
+        name: String(songId),
+        pic: '',
+        url: ''
+    });
+    context.ml_save_task_music_file = async (task, _response, _lyrics, song) => {
+        if (shouldPause) {
+            shouldPause = false;
+            task.status = 'paused';
+            task.isPaused = true;
+            throw error;
+        }
+        savedSongs.push(song);
+    };
+
+    const task = {
+        id: 12,
+        songs: [blockedSong, unstartedSong],
+        remainingSongs: null,
+        totalCount: 3,
+        completedCount: 1,
+        successCount: 1,
+        failedCount: 0,
+        failedSongs: [],
+        progress: 0,
+        outputMode: 'folder',
+        folderWrittenCount: 1,
+        generatedFiles: [],
+        songFailureErrors: new Map(),
+        fatalError: null,
+        status: 'active',
+        isPaused: false,
+        abortController: null
+    };
+
+    await context.ml_execute_batch_task(task);
+
+    assert.equal(task.status, 'paused');
+    assert.equal(task.fatalError, null);
+    assert.deepEqual(Array.from(task.remainingSongs, song => song.id), [2, 3]);
+    assert.equal(alerts.length, 0);
+
+    task.status = 'active';
+    task.isPaused = false;
+    await context.ml_execute_batch_task(task);
+
+    assert.deepEqual(savedSongs, [blockedSong, unstartedSong]);
+    assert.equal(task.successCount, 3);
+    assert.equal(task.failedCount, 0);
+    assert.equal(task.failedSongs.length, 0);
+    assert.equal(alerts.length, 0);
+});
+
 test('browser-managed and direct-folder tasks use different completion semantics', () => {
     const context = loadScript('static/ml-task-manager.js');
 
