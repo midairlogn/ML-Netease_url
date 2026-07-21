@@ -30,6 +30,7 @@ function loadScripts(relativePaths, overrides = {}) {
         window: { addEventListener() {}, removeEventListener() {} },
         Blob,
         DOMException,
+        AbortController,
         setTimeout,
         clearTimeout,
         $: createJQueryStub(),
@@ -386,7 +387,6 @@ test('folder permission loss after output starts fails instead of switching to a
         folderHandle: {},
         folderWrittenCount: 1,
         usedFileNames: new Set(['song.flac']),
-        generatedFiles: [],
         folderFallbackNotified: false,
         status: 'active',
         isPaused: false,
@@ -407,7 +407,6 @@ test('folder permission loss after output starts fails instead of switching to a
         error => error.name === 'FolderOutputBlockedError' && error.mlPartialFolderOutput === true
     );
     assert.equal(task.outputMode, 'folder');
-    assert.equal(task.generatedFiles.length, 0);
 });
 
 test('batch execution stops after partial folder output loses permission', async () => {
@@ -454,7 +453,6 @@ test('batch execution stops after partial folder output loses permission', async
         progress: 0,
         outputMode: 'folder',
         folderWrittenCount: 1,
-        generatedFiles: [],
         songFailureErrors: new Map(),
         fatalError: null,
         status: 'active',
@@ -468,7 +466,6 @@ test('batch execution stops after partial folder output loses permission', async
     assert.deepEqual(Array.from(task.failedSongs, song => song.id), [2, 3]);
     assert.equal(task.failedCount, 2);
     assert.equal(task.outputMode, 'folder');
-    assert.equal(task.generatedFiles.length, 0);
     assert.equal(alerts.length, 1);
     assert.equal(alerts[0][0], '文件夹下载中断');
 });
@@ -524,7 +521,6 @@ test('pausing during a blocked folder write preserves songs for resume', async (
         progress: 0,
         outputMode: 'folder',
         folderWrittenCount: 1,
-        generatedFiles: [],
         songFailureErrors: new Map(),
         fatalError: null,
         status: 'active',
@@ -550,11 +546,11 @@ test('pausing during a blocked folder write preserves songs for resume', async (
     assert.equal(alerts.length, 0);
 });
 
-test('browser-managed and direct-folder tasks use different completion semantics', () => {
+test('browser-managed and direct-write tasks use different completion semantics', () => {
     const context = loadScript('static/ml-task-manager.js');
 
     assert.equal(context.ml_task_uses_browser_download({ type: 'single', outputMode: 'individual' }), true);
-    assert.equal(context.ml_task_uses_browser_download({ type: 'batch', outputMode: 'zip' }), true);
+    assert.equal(context.ml_task_uses_browser_download({ type: 'batch', outputMode: 'zip' }), false);
     assert.equal(context.ml_task_uses_browser_download({ type: 'batch', outputMode: 'folder' }), false);
 });
 
@@ -579,35 +575,453 @@ test('only final per-song storage errors affect the failure alert classification
     assert.equal(storageFailures[0], storageFailedSong);
 });
 
-test('successful ZIP submission releases retained source buffers', async () => {
-    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js']);
-    let submittedName = null;
+test('streaming ZIP writes each song directly and finalizes the selected file', async () => {
     const zippedFiles = [];
-    context.JSZip = class FakeZip {
-        file(name, data) { zippedFiles.push({ name, data }); }
-        async generateAsync() { return { size: 2048 }; }
-    };
-    context.ml_with_browser_download_slot = operation => operation();
-    context.ml_trigger_blob_download = async (_blob, fileName) => {
-        submittedName = fileName;
+    let writerOptions = null;
+    let closed = false;
+    let writableAborted = false;
+    class FakeReader {
+        constructor(data) { this.data = data; }
+    }
+    class FakeZipWriter {
+        constructor(writable, options) {
+            this.writable = writable;
+            writerOptions = options;
+        }
+        async add(name, reader, options) {
+            zippedFiles.push({ name, data: reader.data, options });
+        }
+        async close() { closed = true; }
+    }
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: FakeZipWriter, Uint8ArrayReader: FakeReader },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            showSaveFilePicker() {}
+        }
+    });
+    const writable = {
+        async abort() { writableAborted = true; }
     };
     const task = {
         outputMode: 'zip',
-        generatedFiles: [
-            { fileName: 'one.flac', data: new Uint8Array(1024) },
-            { fileName: 'two.flac', data: new Uint8Array(1024) }
-        ],
+        zipFileHandle: { async createWritable() { return writable; } },
+        zipWritable: null,
+        zipWriter: null,
+        zipAbortController: null,
+        zipEntryCount: 0,
+        zipFinalized: false,
+        zipAborted: false,
+        usedFileNames: new Set(),
         status: 'active',
-        isPaused: false,
-        collectionName: 'Album'
+        isPaused: false
     };
 
+    await context.ml_prepare_streaming_zip_task(task);
+    await context.ml_add_music_file_to_zip(task, {
+        fileName: 'one.flac',
+        data: new Uint8Array(1024)
+    });
+    await context.ml_add_music_file_to_zip(task, {
+        fileName: 'two.flac',
+        data: new Uint8Array(2048)
+    });
     await context.ml_finish_zip_task(task);
 
-    assert.equal(submittedName, 'Album.zip');
+    assert.equal(writerOptions.level, 0);
+    assert.equal(writerOptions.bufferedWrite, false);
+    assert.equal(writerOptions.useWebWorkers, false);
     assert.deepEqual(zippedFiles.map(file => file.name), ['one.flac', 'two.flac']);
-    assert.equal(zippedFiles.every(file => file.data instanceof Uint8Array), true);
-    assert.equal(task.generatedFiles.length, 0);
+    assert.deepEqual(zippedFiles.map(file => file.data.byteLength), [1024, 2048]);
+    assert.equal(zippedFiles.every(file => file.options.level === 0), true);
+    assert.equal(task.zipEntryCount, 2);
+    assert.equal(task.zipFinalized, true);
+    assert.equal(task.zipWriter, null);
+    assert.equal(closed, true);
+    assert.equal(writableAborted, false);
+});
+
+test('cancelling a streaming ZIP aborts the selected file transaction', async () => {
+    let abortCount = 0;
+    class FakeZipWriter {}
+    class FakeReader {}
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: FakeZipWriter, Uint8ArrayReader: FakeReader },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            showSaveFilePicker() {}
+        }
+    });
+    const task = {
+        outputMode: 'zip',
+        zipFileHandle: {
+            async createWritable() {
+                return { async abort() { abortCount++; } };
+            }
+        },
+        zipWritable: null,
+        zipWriter: null,
+        zipAbortController: null,
+        zipFinalized: false,
+        zipAborted: false
+    };
+
+    await context.ml_prepare_streaming_zip_task(task);
+    const signal = task.zipAbortController.signal;
+    await context.ml_abort_streaming_zip_task(task);
+    await context.ml_abort_streaming_zip_task(task);
+
+    assert.equal(signal.aborted, true);
+    assert.equal(abortCount, 1);
+    assert.equal(task.zipAborted, true);
+    assert.equal(task.zipWriter, null);
+});
+
+test('a streaming ZIP entry failure is fatal and releases its reserved name', async () => {
+    class FakeReader {
+        constructor(data) { this.data = data; }
+    }
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: class {}, Uint8ArrayReader: FakeReader },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            showSaveFilePicker() {}
+        }
+    });
+    const task = {
+        outputMode: 'zip',
+        zipWriter: {
+            async add() { throw new DOMException('Disk full', 'QuotaExceededError'); }
+        },
+        zipEntryCount: 0,
+        usedFileNames: new Set()
+    };
+
+    await assert.rejects(
+        context.ml_add_music_file_to_zip(task, {
+            fileName: 'song.flac',
+            data: new Uint8Array(1024)
+        }),
+        error => error.name === 'ZipWriteError' && error.mlZipWriteFatal === true
+    );
+
+    assert.equal(task.zipEntryCount, 0);
+    assert.equal(task.usedFileNames.has('song.flac'), false);
+});
+
+test('streaming ZIP support requires both the picker and zip.js APIs', () => {
+    const supported = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: class {}, Uint8ArrayReader: class {} },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            showSaveFilePicker() {}
+        }
+    });
+    const unsupported = loadScript('static/ml-task-manager.js');
+
+    assert.equal(supported.ml_is_streaming_zip_supported(), true);
+    assert.equal(unsupported.ml_is_streaming_zip_supported(), false);
+});
+
+test('ZIP task creation selects the destination before queueing the task', async () => {
+    const selectedHandle = { name: 'Album.zip' };
+    let pickerOptions = null;
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: class {}, Uint8ArrayReader: class {} },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            async showSaveFilePicker(options) {
+                pickerOptions = options;
+                return selectedHandle;
+            }
+        }
+    });
+    context.ml_get_collection_download_mode = () => 'zip';
+    context.ml_prompt_collection_download_name = async () => 'Album';
+    context.ml_create_task = options => options;
+
+    const taskOptions = await context.ml_add_batch_task(
+        [{ id: 1 }, { id: 2 }],
+        'Album',
+        '',
+        '',
+        'lossless'
+    );
+
+    assert.equal(pickerOptions.suggestedName, 'Album.zip');
+    assert.equal(pickerOptions.types[0].accept['application/zip'][0], '.zip');
+    assert.equal(taskOptions.outputMode, 'zip');
+    assert.equal(taskOptions.zipFileHandle, selectedHandle);
+});
+
+test('unsupported streaming ZIP falls back to individual downloads', async () => {
+    const alerts = [];
+    const context = loadScript('static/ml-task-manager.js');
+    context.ml_get_collection_download_mode = () => 'zip';
+    context.ml_prompt_collection_download_name = async () => 'Album';
+    context.ml_show_Alert = (...args) => alerts.push(args);
+    context.ml_create_task = options => options;
+
+    const taskOptions = await context.ml_add_batch_task(
+        [{ id: 1 }, { id: 2 }],
+        'Album',
+        '',
+        '',
+        'lossless'
+    );
+
+    assert.equal(taskOptions.outputMode, 'individual');
+    assert.equal(taskOptions.zipFileHandle, null);
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][0], 'ZIP不可用');
+});
+
+test('ZIP picker errors fall back to individual downloads', async () => {
+    const alerts = [];
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: class {}, Uint8ArrayReader: class {} },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            async showSaveFilePicker() {
+                throw new DOMException('Picker blocked', 'SecurityError');
+            }
+        },
+        console: { log() {}, warn() {}, error() {} }
+    });
+    context.ml_get_collection_download_mode = () => 'zip';
+    context.ml_prompt_collection_download_name = async () => 'Album';
+    context.ml_show_Alert = (...args) => alerts.push(args);
+    context.ml_create_task = options => options;
+
+    const taskOptions = await context.ml_add_batch_task(
+        [{ id: 1 }, { id: 2 }],
+        'Album',
+        '',
+        '',
+        'lossless'
+    );
+
+    assert.equal(taskOptions.outputMode, 'individual');
+    assert.equal(taskOptions.zipFileHandle, null);
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][0], 'ZIP文件选择失败');
+});
+
+test('ZIP batch processing keeps only one song in flight', async () => {
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js'], {
+        console: { log() {}, warn() {}, error() {} }
+    });
+    let activeSaves = 0;
+    let maxActiveSaves = 0;
+    context.ml_get_concurrent_count = () => 3;
+    context.ml_update_task_item = () => {};
+    context.ml_sanitize_lrc_timestamps = lyrics => lyrics;
+    context.ml_resolve_lrc_timestamp_conflicts = lyrics => lyrics;
+    context.ml_fetch_task_song_info = async songId => ({
+        status: 200,
+        lyric: '',
+        tlyric: '',
+        name: String(songId)
+    });
+    context.ml_save_task_music_file = async () => {
+        activeSaves++;
+        maxActiveSaves = Math.max(maxActiveSaves, activeSaves);
+        await new Promise(resolve => setImmediate(resolve));
+        activeSaves--;
+    };
+    context.ml_finish_zip_task = async () => {};
+    const songs = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const task = {
+        id: 20,
+        songs,
+        remainingSongs: null,
+        totalCount: songs.length,
+        completedCount: 0,
+        successCount: 0,
+        failedCount: 0,
+        failedSongs: [],
+        progress: 0,
+        outputMode: 'zip',
+        zipEntryCount: 0,
+        songFailureErrors: new Map(),
+        fatalError: null,
+        status: 'active',
+        isPaused: false,
+        abortController: null
+    };
+
+    await context.ml_execute_batch_task(task);
+
+    assert.equal(maxActiveSaves, 1);
+    assert.equal(task.successCount, 3);
+});
+
+test('pausing and resuming a ZIP batch preserves the open writer', async () => {
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js'], {
+        console: { log() {}, warn() {}, error() {} }
+    });
+    const songs = [{ id: 1 }, { id: 2 }];
+    const savedSongIds = [];
+    const writer = {};
+    let shouldPause = true;
+    let finalizedWriter = null;
+    context.ml_get_concurrent_count = () => 3;
+    context.ml_update_task_item = () => {};
+    context.ml_update_task_panel = () => {};
+    context.ml_sanitize_lrc_timestamps = lyrics => lyrics;
+    context.ml_resolve_lrc_timestamp_conflicts = lyrics => lyrics;
+    context.ml_fetch_task_song_info = async songId => ({
+        status: 200,
+        lyric: '',
+        tlyric: '',
+        name: String(songId)
+    });
+    context.ml_save_task_music_file = async (task, _response, _lyrics, song) => {
+        savedSongIds.push(song.id);
+        if (shouldPause) {
+            shouldPause = false;
+            task.status = 'paused';
+            task.isPaused = true;
+        }
+    };
+    context.ml_finish_zip_task = async task => {
+        finalizedWriter = task.zipWriter;
+    };
+    const task = {
+        id: 21,
+        songs,
+        remainingSongs: null,
+        totalCount: songs.length,
+        completedCount: 0,
+        successCount: 0,
+        failedCount: 0,
+        failedSongs: [],
+        progress: 0,
+        outputMode: 'zip',
+        zipWriter: writer,
+        zipEntryCount: 1,
+        songFailureErrors: new Map(),
+        fatalError: null,
+        status: 'active',
+        isPaused: false,
+        abortController: null
+    };
+
+    await context.ml_execute_batch_task(task);
+    assert.equal(task.status, 'paused');
+    assert.equal(task.zipWriter, writer);
+    assert.deepEqual(Array.from(task.remainingSongs, song => song.id), [2]);
+
+    task.status = 'active';
+    task.isPaused = false;
+    await context.ml_execute_batch_task(task);
+
+    assert.deepEqual(savedSongIds, [1, 2]);
+    assert.equal(task.successCount, 2);
+    assert.equal(finalizedWriter, writer);
+});
+
+test('ZIP initialization failure marks the task failed and runs cleanup', async () => {
+    const alerts = [];
+    const failedToasts = [];
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { ZipWriter: class {}, Uint8ArrayReader: class {} },
+        window: {
+            addEventListener() {},
+            removeEventListener() {},
+            showSaveFilePicker() {}
+        },
+        console: { log() {}, warn() {}, error() {} }
+    });
+    context.ml_update_task_panel = () => {};
+    context.ml_update_task_badge = () => {};
+    context.ml_show_task_started_toast = () => {};
+    context.ml_show_task_failed_toast = task => failedToasts.push(task.id);
+    context.ml_show_Alert = (...args) => alerts.push(args);
+    context.ml_process_task_queue = () => {};
+    const songs = [{ id: 1 }, { id: 2 }];
+    const task = {
+        id: 22,
+        type: 'batch',
+        status: 'waiting',
+        songs,
+        totalCount: songs.length,
+        successCount: 0,
+        failedCount: 0,
+        failedSongs: [],
+        completedCount: 0,
+        progress: 0,
+        outputMode: 'zip',
+        zipFileHandle: {
+            async createWritable() {
+                throw new DOMException('Permission denied', 'NotAllowedError');
+            }
+        },
+        zipWritable: null,
+        zipWriter: null,
+        zipAbortController: null,
+        zipEntryCount: 0,
+        zipFinalized: false,
+        zipAborted: false,
+        zipFailureNotified: false,
+        isPaused: false,
+        abortController: null
+    };
+
+    await context.ml_start_task(task);
+
+    assert.equal(task.status, 'failed');
+    assert.equal(task.successCount, 0);
+    assert.equal(task.failedCount, 2);
+    assert.deepEqual(Array.from(task.failedSongs, song => song.id), [1, 2]);
+    assert.equal(task.zipAborted, true);
+    assert.deepEqual(failedToasts, [22]);
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][0], 'ZIP写入失败');
+});
+
+test('folder fallback before the first write submits the built file individually', async () => {
+    const alerts = [];
+    const submittedFiles = [];
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js']);
+    context.ml_build_music_file = async () => ({
+        data: new Uint8Array([1, 2, 3]),
+        mimeType: 'audio/flac',
+        fileName: 'song.flac'
+    });
+    context.ml_get_unique_folder_file_name = async (_handle, fileName, usedNames) => {
+        usedNames.add(fileName);
+        return fileName;
+    };
+    context.ml_write_data_to_folder = async () => {
+        throw new DOMException('Permission denied', 'NotAllowedError');
+    };
+    context.ml_with_browser_download_slot = operation => operation();
+    context.ml_trigger_built_music_file_download = async file => submittedFiles.push(file.fileName);
+    context.ml_show_Alert = (...args) => alerts.push(args);
+    const task = {
+        outputMode: 'folder',
+        folderHandle: {},
+        folderWrittenCount: 0,
+        usedFileNames: new Set(),
+        folderFallbackNotified: false,
+        status: 'active',
+        isPaused: false,
+        abortController: null
+    };
+
+    await context.ml_save_task_music_file(task, {}, '', {});
+
+    assert.equal(task.outputMode, 'individual');
+    assert.deepEqual(submittedFiles, ['song.flac']);
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][0], '已改单独下载');
 });
 
 test('folder mode writes the tagged buffer without creating an intermediate Blob', async () => {
@@ -710,7 +1124,6 @@ test('a recovered storage retry does not classify another song network failure a
         failedSongs: [],
         progress: 0,
         outputMode: 'individual',
-        generatedFiles: [],
         songFailureErrors: new Map(),
         status: 'active',
         isPaused: false,

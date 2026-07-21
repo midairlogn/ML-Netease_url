@@ -103,7 +103,14 @@ function ml_create_task(options) {
         sourceType: options.sourceType || null,
         collectionName: options.collectionName || options.title || '',
         folderHandle: options.folderHandle || null,
-        generatedFiles: [],
+        zipFileHandle: options.zipFileHandle || null,
+        zipWritable: null,
+        zipWriter: null,
+        zipAbortController: null,
+        zipEntryCount: 0,
+        zipFinalized: false,
+        zipAborted: false,
+        zipFailureNotified: false,
         usedFileNames: new Set(),
         folderFallbackNotified: false,
         folderWrittenCount: 0,
@@ -168,11 +175,12 @@ async function ml_add_batch_task(songs, title, description, cover, level, option
 
     let finalOutputMode = outputMode;
     let folderHandle = null;
+    let zipFileHandle = null;
 
     if (finalOutputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER) {
         if (!window.showDirectoryPicker) {
-            ml_show_Alert('浏览器不支持', '当前浏览器不支持选择文件夹，将改为下载ZIP压缩包。', 'warning');
-            finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+            ml_show_Alert('浏览器不支持', '当前浏览器不支持选择文件夹，将改为单独文件下载。', 'warning');
+            finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
         } else {
             try {
                 const parentHandle = await window.showDirectoryPicker({
@@ -182,21 +190,21 @@ async function ml_add_batch_task(songs, title, description, cover, level, option
                 });
 
                 if (!await ml_verify_directory_writable(parentHandle)) {
-                    ml_show_Alert('没有文件夹写入权限', '浏览器没有授予所选文件夹的写入权限，将改为下载ZIP压缩包。请避免选择受保护目录，或在浏览器权限弹窗中允许写入。', 'warning');
-                    finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+                    ml_show_Alert('没有文件夹写入权限', '浏览器没有授予所选文件夹的写入权限，将改为单独文件下载。请避免选择受保护目录，或在浏览器权限弹窗中允许写入。', 'warning');
+                    finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
                 } else {
                     folderHandle = await parentHandle.getDirectoryHandle(ml_sanitize_path_segment(collectionName), { create: true });
 
                     if (!await ml_verify_directory_writable(folderHandle)) {
-                        ml_show_Alert('没有子文件夹写入权限', '浏览器没有授予目标子文件夹的写入权限，将改为下载ZIP压缩包。', 'warning');
-                        finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+                        ml_show_Alert('没有子文件夹写入权限', '浏览器没有授予目标子文件夹的写入权限，将改为单独文件下载。', 'warning');
+                        finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
                         folderHandle = null;
                     }
                 }
             } catch (error) {
                 if (error?.name !== 'AbortError') {
-                    ml_show_Alert('文件夹选择失败', '无法访问所选文件夹或浏览器拒绝写入，将改为下载ZIP压缩包。', 'warning');
-                    finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+                    ml_show_Alert('文件夹选择失败', '无法访问所选文件夹或浏览器拒绝写入，将改为单独文件下载。', 'warning');
+                    finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
                     folderHandle = null;
                 } else {
                     return null;
@@ -205,9 +213,22 @@ async function ml_add_batch_task(songs, title, description, cover, level, option
         }
     }
 
-    if (finalOutputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && typeof JSZip === 'undefined') {
-        ml_show_Alert('ZIP不可用', 'ZIP组件未加载，将改为单独文件下载。', 'warning');
-        finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+    if (finalOutputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
+        if (!ml_is_streaming_zip_supported()) {
+            ml_show_Alert('ZIP不可用', '当前浏览器不支持流式ZIP写入，将改为单独文件下载。', 'warning');
+            finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+        } else {
+            try {
+                zipFileHandle = await ml_select_zip_file_handle(collectionName);
+            } catch (error) {
+                if (error?.name === 'AbortError') {
+                    return null;
+                }
+                console.error('Failed to select ZIP destination:', error);
+                ml_show_Alert('ZIP文件选择失败', '无法创建ZIP文件，将改为单独文件下载。', 'warning');
+                finalOutputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+            }
+        }
     }
 
     return ml_create_task({
@@ -221,7 +242,8 @@ async function ml_add_batch_task(songs, title, description, cover, level, option
         outputMode: finalOutputMode,
         sourceType: options.sourceType || null,
         collectionName: collectionName,
-        folderHandle: folderHandle
+        folderHandle: folderHandle,
+        zipFileHandle: zipFileHandle
     });
 }
 
@@ -231,7 +253,25 @@ function ml_get_collection_download_mode() {
 }
 
 function ml_task_uses_browser_download(task) {
-    return task.type === ML_TASK_TYPE.SINGLE || task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.FOLDER;
+    return task.type === ML_TASK_TYPE.SINGLE || task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
+}
+
+function ml_is_streaming_zip_supported() {
+    return typeof window.showSaveFilePicker === 'function' &&
+        typeof zip !== 'undefined' &&
+        typeof zip.ZipWriter === 'function' &&
+        typeof zip.Uint8ArrayReader === 'function';
+}
+
+function ml_select_zip_file_handle(collectionName) {
+    return window.showSaveFilePicker({
+        id: 'ml-netease-zip-file',
+        suggestedName: `${ml_sanitize_path_segment(collectionName || 'download')}.zip`,
+        types: [{
+            description: 'ZIP archive',
+            accept: { 'application/zip': ['.zip'] }
+        }]
+    });
 }
 
 async function ml_prompt_collection_download_name(defaultName, outputMode) {
@@ -253,7 +293,7 @@ function ml_get_collection_prompt_text(outputMode) {
     if (outputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER) {
         return {
             title: '设置目标文件夹名称',
-            message: '请输入本次多曲下载要创建的文件夹名称。下一步请选择保存位置；如果浏览器拒绝写入，将自动改为ZIP下载。'
+            message: '请输入本次多曲下载要创建的文件夹名称。下一步请选择保存位置；如果浏览器拒绝写入，将自动改为单独文件下载。'
         };
     }
     return {
@@ -575,6 +615,135 @@ async function ml_write_data_to_folder(folderHandle, fileName, data) {
     }
 }
 
+function ml_create_zip_write_error(error, message) {
+    const zipError = new Error(message);
+    zipError.name = 'ZipWriteError';
+    zipError.mlZipWriteFatal = true;
+    zipError.cause = error;
+    return zipError;
+}
+
+async function ml_prepare_streaming_zip_task(task) {
+    if (task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.ZIP || task.zipWriter) {
+        return;
+    }
+    if (!ml_is_streaming_zip_supported() || !task.zipFileHandle) {
+        throw ml_create_zip_write_error(null, 'Streaming ZIP output is not available');
+    }
+
+    let writable = null;
+    try {
+        writable = await task.zipFileHandle.createWritable();
+        task.zipAbortController = new AbortController();
+        task.zipWritable = writable;
+        task.zipWriter = new zip.ZipWriter(writable, {
+            level: 0,
+            bufferedWrite: false,
+            useWebWorkers: false,
+            signal: task.zipAbortController.signal
+        });
+    } catch (error) {
+        if (writable && typeof writable.abort === 'function') {
+            try {
+                await writable.abort();
+            } catch (abortError) {
+                console.warn('Failed to abort ZIP output after initialization failed:', abortError);
+            }
+        }
+        task.zipWritable = null;
+        task.zipWriter = null;
+        task.zipAbortController = null;
+        throw ml_create_zip_write_error(error, 'Unable to initialize streaming ZIP output');
+    }
+}
+
+async function ml_add_music_file_to_zip(task, musicFile) {
+    if (!task.zipWriter) {
+        throw ml_create_zip_write_error(null, 'Streaming ZIP writer is not initialized');
+    }
+
+    const fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
+    const data = ArrayBuffer.isView(musicFile.data) ?
+        new Uint8Array(musicFile.data.buffer, musicFile.data.byteOffset, musicFile.data.byteLength) :
+        new Uint8Array(musicFile.data);
+
+    try {
+        await task.zipWriter.add(fileName, new zip.Uint8ArrayReader(data), { level: 0 });
+        task.zipEntryCount++;
+    } catch (error) {
+        task.usedFileNames.delete(fileName);
+        throw ml_create_zip_write_error(error, `Unable to write ${fileName} to the ZIP archive`);
+    }
+}
+
+async function ml_abort_streaming_zip_task(task) {
+    if (task.zipFinalized || task.zipAborted) {
+        return;
+    }
+
+    if (task.zipAbortController && !task.zipAbortController.signal.aborted) {
+        task.zipAbortController.abort();
+    }
+
+    const writable = task.zipWritable;
+    task.zipWriter = null;
+    task.zipWritable = null;
+    task.zipAbortController = null;
+    task.zipAborted = true;
+
+    if (writable && typeof writable.abort === 'function') {
+        try {
+            await writable.abort();
+        } catch (error) {
+            if (error?.name !== 'AbortError' && error?.name !== 'InvalidStateError') {
+                console.warn('Failed to abort streaming ZIP output:', error);
+            }
+        }
+    }
+}
+
+async function ml_finish_zip_task(task) {
+    if (task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.ZIP || task.zipFinalized || task.zipAborted) {
+        return;
+    }
+    if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
+        return;
+    }
+    if (task.zipEntryCount === 0) {
+        await ml_abort_streaming_zip_task(task);
+        return;
+    }
+
+    try {
+        await task.zipWriter.close();
+        task.zipFinalized = true;
+        task.zipWriter = null;
+        task.zipWritable = null;
+        task.zipAbortController = null;
+    } catch (error) {
+        await ml_abort_streaming_zip_task(task);
+        throw ml_create_zip_write_error(error, 'Unable to finalize the streaming ZIP archive');
+    }
+}
+
+function ml_mark_zip_output_failed(task) {
+    task.successCount = 0;
+    task.failedSongs = [...task.songs];
+    task.failedCount = task.totalCount;
+    task.completedCount = task.totalCount;
+    task.progress = 100;
+}
+
+function ml_show_zip_output_failure(task) {
+    if (task.zipFailureNotified) return;
+    task.zipFailureNotified = true;
+    ml_show_Alert(
+        'ZIP写入失败',
+        '无法继续写入ZIP文件，未完成的文件已丢弃。请检查目标磁盘空间和文件权限后重试。',
+        'error'
+    );
+}
+
 // ===== Task Processing =====
 
 /**
@@ -650,6 +819,10 @@ async function ml_start_task(task) {
     ml_update_task_panel();
 
     try {
+        if (task.type === ML_TASK_TYPE.BATCH && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
+            await ml_prepare_streaming_zip_task(task);
+        }
+
         if (task.type === ML_TASK_TYPE.SINGLE) {
             await ml_execute_single_task(task);
         } else {
@@ -669,10 +842,19 @@ async function ml_start_task(task) {
         }
     } catch (error) {
         console.error(`Task ${task.id} failed:`, error);
+        if (error?.mlZipWriteFatal && task.status !== ML_TASK_STATUS.CANCELLED) {
+            ml_mark_zip_output_failed(task);
+            ml_show_zip_output_failure(task);
+            ml_show_task_failed_toast(task);
+        }
         if (task.status === ML_TASK_STATUS.ACTIVE) {
             task.status = ML_TASK_STATUS.FAILED;
         }
     } finally {
+        if ((task.status === ML_TASK_STATUS.FAILED || task.status === ML_TASK_STATUS.CANCELLED) &&
+            task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
+            await ml_abort_streaming_zip_task(task);
+        }
         ml_update_task_panel();
         ml_update_task_badge();
 
@@ -780,8 +962,7 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
     }
 
     if (task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
-        const fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
-        task.generatedFiles.push({ fileName: fileName, data: musicFile.data });
+        await ml_add_music_file_to_zip(task, musicFile);
         return;
     }
 
@@ -815,47 +996,19 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
                 throw partialFolderError;
             }
 
-            task.outputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
+            task.outputMode = ML_COLLECTION_DOWNLOAD_MODE.INDIVIDUAL;
             task.folderHandle = null;
-            task.generatedFiles.push({ fileName: fileName || ml_get_unique_file_name(musicFile.fileName, task.usedFileNames), data: musicFile.data });
+            if (fileName) {
+                task.usedFileNames.delete(fileName);
+            }
+            musicFile.fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
+            await ml_with_browser_download_slot(() => ml_trigger_built_music_file_download(musicFile));
 
             if (!task.folderFallbackNotified) {
                 task.folderFallbackNotified = true;
-                ml_show_Alert('已改为ZIP下载', '浏览器拒绝写入所选文件夹，当前任务将继续处理并在完成后下载ZIP压缩包。普通浏览器下载仍会保存到你的默认下载目录。', 'warning');
+                ml_show_Alert('已改单独下载', '浏览器拒绝写入所选文件夹，当前任务将继续把歌曲逐个提交到浏览器下载。', 'warning');
             }
         }
-    }
-}
-
-async function ml_finish_zip_task(task) {
-    if (task.outputMode !== ML_COLLECTION_DOWNLOAD_MODE.ZIP || task.generatedFiles.length === 0) {
-        return;
-    }
-    if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
-        return;
-    }
-    if (typeof JSZip === 'undefined') {
-        throw new Error('JSZip is not available');
-    }
-
-    const zip = new JSZip();
-    task.generatedFiles.forEach(file => {
-        zip.file(file.fileName, file.data);
-    });
-
-    let submitted = false;
-    await ml_with_browser_download_slot(async () => {
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        if (task.status !== ML_TASK_STATUS.ACTIVE || task.isPaused) {
-            return;
-        }
-
-        await ml_trigger_blob_download(zipBlob, `${ml_sanitize_path_segment(task.collectionName || task.title || 'download')}.zip`);
-        submitted = true;
-    });
-
-    if (submitted) {
-        task.generatedFiles = [];
     }
 }
 
@@ -933,6 +1086,12 @@ async function ml_execute_batch_task(task) {
                         return;
                     }
 
+                    if (error?.mlZipWriteFatal) {
+                        task.fatalError = error;
+                        currentRoundFailed.push(song);
+                        return;
+                    }
+
                     task.songFailureErrors.set(song, error);
                     if (ml_is_storage_io_error(error)) {
                         console.warn(`Task ${task.id}: browser storage failed during ${error.mlFolderWriteStage || 'file processing'}.`, error);
@@ -948,7 +1107,8 @@ async function ml_execute_batch_task(task) {
             }
         }
 
-        const workerCount = task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER ?
+        const workerCount = task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER ||
+            task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP ?
             1 : Math.min(concurrentCount, songQueue.length);
         const workers = Array.from({ length: workerCount }, () => downloadNextSong());
         await Promise.all(workers);
@@ -959,7 +1119,6 @@ async function ml_execute_batch_task(task) {
         }
 
         if (task.status === ML_TASK_STATUS.CANCELLED) {
-            task.generatedFiles = [];
             break;
         }
 
@@ -994,10 +1153,17 @@ async function ml_execute_batch_task(task) {
         );
     }
 
+    if (task.fatalError?.mlZipWriteFatal) {
+        await ml_abort_streaming_zip_task(task);
+        ml_mark_zip_output_failed(task);
+        ml_show_zip_output_failure(task);
+        return;
+    }
+
     const storageFailedSongs = ml_get_storage_failed_songs(task);
     if (storageFailedSongs.length > 0) {
         const failedNames = task.failedSongs.map(song => song.name || song.id).join('\n');
-        const zipNotice = task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.generatedFiles.length > 0 ?
+        const zipNotice = task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.zipEntryCount > 0 ?
             `ZIP压缩包只包含已成功下载的 ${task.successCount} 首歌曲。\n\n` : '';
         const otherFailedCount = task.failedCount - storageFailedSongs.length;
         const otherFailureNotice = otherFailedCount > 0 ? `另有 ${otherFailedCount} 首因其他原因失败。\n\n` : '';
@@ -1006,12 +1172,12 @@ async function ml_execute_batch_task(task) {
             `${zipNotice}有 ${storageFailedSongs.length} 首歌曲在写入浏览器临时存储或目标文件夹时失败。${otherFailureNotice}请释放系统盘和目标磁盘空间、降低同时下载数后重试。\n\n${failedNames}`,
             'error'
         );
-    } else if (task.failedSongs.length > 0 && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.generatedFiles.length > 0) {
+    } else if (task.failedSongs.length > 0 && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP && task.zipEntryCount > 0) {
         const failedNames = task.failedSongs.map(song => song.name || song.id).join('\n');
         ml_show_Alert('部分歌曲下载失败', `ZIP压缩包只包含已成功下载的 ${task.successCount} 首歌曲。\n失败: ${task.failedCount} 首\n\n${failedNames}`, 'warning');
     }
 
-    if (task.status === ML_TASK_STATUS.ACTIVE) {
+    if (task.status === ML_TASK_STATUS.ACTIVE && !task.fatalError) {
         await ml_finish_zip_task(task);
     }
 }
@@ -1086,11 +1252,18 @@ async function ml_cancel_task(taskId) {
     const confirmed = await ml_show_Confirm('取消任务', '确定要取消这个下载任务吗？');
     if (!confirmed) return;
 
+    const wasActive = task.status === ML_TASK_STATUS.ACTIVE;
     task.status = ML_TASK_STATUS.CANCELLED;
     task.isPaused = false;
 
     if (task.abortController) {
         task.abortController.abort();
+    }
+    if (task.zipAbortController && !task.zipAbortController.signal.aborted) {
+        task.zipAbortController.abort();
+    }
+    if (!wasActive && task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP) {
+        await ml_abort_streaming_zip_task(task);
     }
 
     ml_update_task_panel();
@@ -1706,6 +1879,9 @@ function ml_show_task_started_toast(task) {
  */
 function ml_show_task_completed_toast(task) {
     const usesBrowserDownload = ml_task_uses_browser_download(task);
+    const directWriteSubtitle = task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.ZIP ?
+        `${task.successCount}/${task.totalCount} 首歌曲已写入ZIP文件` :
+        `${task.successCount}/${task.totalCount} 首歌曲已写入文件夹`;
     ml_show_toast({
         type: usesBrowserDownload ? 'submitted' : 'completed',
         title: task.title,
@@ -1713,7 +1889,7 @@ function ml_show_task_completed_toast(task) {
             (task.type === ML_TASK_TYPE.BATCH ?
                 `${task.successCount}/${task.totalCount} 首歌曲已提交，请在浏览器下载列表确认` :
                 '已提交，请在浏览器下载列表确认') :
-            `${task.successCount}/${task.totalCount} 首歌曲已写入文件夹`,
+            directWriteSubtitle,
         cover: task.cover
     });
 }

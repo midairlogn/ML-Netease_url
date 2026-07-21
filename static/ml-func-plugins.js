@@ -908,13 +908,17 @@ async function ml_trigger_blob_download(blob, fileName) {
     }
 }
 
+async function ml_trigger_built_music_file_download(musicFile) {
+    const blob = new Blob([musicFile.data], { type: musicFile.mimeType });
+    await ml_trigger_blob_download(blob, musicFile.fileName);
+}
+
 // 定义下载函数
 async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
     return ml_with_browser_download_slot(async () => {
         try {
             const musicFile = await ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level, trackNumber, totalTracks, abortSignal);
-            const blob = new Blob([musicFile.data], { type: musicFile.mimeType });
-            await ml_trigger_blob_download(blob, musicFile.fileName);
+            await ml_trigger_built_music_file_download(musicFile);
         } catch (error) {
             if (error?.name !== 'AbortError') {
                 ml_show_Alert('下载错误', '下载音乐时发生错误，请查看控制台获取详情。', 'error');
