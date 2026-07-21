@@ -98,8 +98,9 @@ test('blob download URL remains valid until the browser handoff timer runs', asy
     assert.equal(appended, true);
     assert.equal(removed, true);
     assert.deepEqual(revokedUrls, []);
-    assert.equal(timers.length, 1);
+    assert.equal(timers.length, 2);
     assert.equal(timers[0].delay, 10000);
+    assert.equal(timers[1].delay, 300000);
 
     timers[0].callback();
     await downloadPromise;
@@ -139,14 +140,54 @@ test('Save As handoff waits for window focus before revoking the Blob URL', asyn
     listeners.blur();
 
     assert.equal(timers[0].cancelled, true);
+    assert.equal(timers[1].delay, 300000);
+    assert.equal(timers[1].cancelled, false);
     assert.deepEqual(revokedUrls, []);
 
     listeners.focus();
-    assert.equal(timers[1].delay, 1000);
-    timers[1].callback();
+    assert.equal(timers[2].delay, 1000);
+    timers[2].callback();
     await downloadPromise;
 
     assert.deepEqual(revokedUrls, ['blob:save-as']);
+});
+
+test('blur without focus still releases the Blob URL at the maximum handoff timeout', async () => {
+    const listeners = {};
+    const timers = [];
+    const revokedUrls = [];
+    const context = loadScript('static/ml-func-plugins.js', {
+        URL: {
+            createObjectURL() { return 'blob:blurred'; },
+            revokeObjectURL(url) { revokedUrls.push(url); }
+        },
+        document: {
+            createElement() { return { click() {} }; },
+            body: { appendChild() {}, removeChild() {} }
+        },
+        window: {
+            addEventListener(type, listener) { listeners[type] = listener; },
+            removeEventListener(type, listener) {
+                if (listeners[type] === listener) delete listeners[type];
+            }
+        },
+        setTimeout(callback, delay) {
+            const timer = { callback, delay, cancelled: false };
+            timers.push(timer);
+            return timer;
+        },
+        clearTimeout(timer) {
+            if (timer) timer.cancelled = true;
+        }
+    });
+
+    const downloadPromise = context.ml_trigger_blob_download({ size: 1024 }, 'song.flac');
+    listeners.blur();
+    timers[1].callback();
+    await downloadPromise;
+
+    assert.equal(timers[0].cancelled, true);
+    assert.deepEqual(revokedUrls, ['blob:blurred']);
 });
 
 test('individual downloads acquire the browser slot before building a Blob', async () => {
@@ -308,6 +349,128 @@ test('folder handle acquisition failure does not delete an unrelated file', asyn
     );
     assert.equal(removeCalled, false);
     assert.equal(context.ml_is_folder_write_blocked_error(error), true);
+});
+
+test('failed folder write probes abort and remove the probe file', async () => {
+    const context = loadScript('static/ml-task-manager.js', {
+        console: { log() {}, warn() {}, error() {} }
+    });
+    let aborted = false;
+    let removedName = null;
+    const error = new DOMException('Could not write probe', 'NotReadableError');
+    const folderHandle = {
+        async getFileHandle(name, options) {
+            assert.equal(options.create, true);
+            return {
+                async createWritable() {
+                    return {
+                        async write() { throw error; },
+                        async abort() { aborted = true; },
+                        async close() { assert.fail('probe close should not run'); }
+                    };
+                }
+            };
+        },
+        async removeEntry(name) { removedName = name; }
+    };
+
+    assert.equal(await context.ml_verify_directory_writable(folderHandle), false);
+    assert.equal(aborted, true);
+    assert.match(removedName, /^\.ml-write-test-/);
+});
+
+test('folder permission loss after output starts fails instead of switching to a partial ZIP', async () => {
+    const context = loadScript('static/ml-task-manager.js');
+    const task = {
+        outputMode: 'folder',
+        folderHandle: {},
+        folderWrittenCount: 1,
+        usedFileNames: new Set(['song.flac']),
+        generatedFiles: [],
+        folderFallbackNotified: false,
+        status: 'active',
+        isPaused: false,
+        level: 'lossless',
+        abortController: null
+    };
+    const permissionError = new DOMException('Permission denied', 'NotAllowedError');
+    context.ml_build_music_file = async () => ({
+        data: new Uint8Array([1, 2, 3]),
+        mimeType: 'audio/flac',
+        fileName: 'song.flac'
+    });
+    context.ml_get_unique_folder_file_name = async () => 'song.flac';
+    context.ml_write_data_to_folder = async () => { throw permissionError; };
+
+    await assert.rejects(
+        context.ml_save_task_music_file(task, {}, '', {}),
+        error => error.name === 'FolderOutputBlockedError' && error.mlPartialFolderOutput === true
+    );
+    assert.equal(task.outputMode, 'folder');
+    assert.equal(task.generatedFiles.length, 0);
+});
+
+test('batch execution stops after partial folder output loses permission', async () => {
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js'], {
+        console: { log() {}, warn() {}, error() {} }
+    });
+    const blockedSong = { id: 2, name: 'Blocked' };
+    const unstartedSong = { id: 3, name: 'Unstarted' };
+    const savedSongs = [];
+    const alerts = [];
+    const error = new Error('Folder write permission was lost after files were written');
+    error.name = 'FolderOutputBlockedError';
+    error.mlPartialFolderOutput = true;
+
+    context.ml_get_concurrent_count = () => 3;
+    context.ml_update_task_item = () => {};
+    context.ml_show_Alert = (...args) => alerts.push(args);
+    context.ml_sanitize_lrc_timestamps = lyrics => lyrics;
+    context.ml_resolve_lrc_timestamp_conflicts = lyrics => lyrics;
+    context.ml_fetch_task_song_info = async songId => ({
+        status: 200,
+        lyric: '',
+        tlyric: '',
+        al_name: '',
+        ar_name: '',
+        name: String(songId),
+        pic: '',
+        url: ''
+    });
+    context.ml_save_task_music_file = async (_task, _response, _lyrics, song) => {
+        savedSongs.push(song);
+        throw error;
+    };
+
+    const task = {
+        id: 11,
+        songs: [blockedSong, unstartedSong],
+        remainingSongs: null,
+        totalCount: 3,
+        completedCount: 1,
+        successCount: 1,
+        failedCount: 0,
+        failedSongs: [],
+        progress: 0,
+        outputMode: 'folder',
+        folderWrittenCount: 1,
+        generatedFiles: [],
+        songFailureErrors: new Map(),
+        fatalError: null,
+        status: 'active',
+        isPaused: false,
+        abortController: null
+    };
+
+    await context.ml_execute_batch_task(task);
+
+    assert.deepEqual(savedSongs, [blockedSong]);
+    assert.deepEqual(Array.from(task.failedSongs, song => song.id), [2, 3]);
+    assert.equal(task.failedCount, 2);
+    assert.equal(task.outputMode, 'folder');
+    assert.equal(task.generatedFiles.length, 0);
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][0], '文件夹下载中断');
 });
 
 test('browser-managed and direct-folder tasks use different completion semantics', () => {

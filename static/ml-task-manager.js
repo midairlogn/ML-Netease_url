@@ -106,6 +106,8 @@ function ml_create_task(options) {
         generatedFiles: [],
         usedFileNames: new Set(),
         folderFallbackNotified: false,
+        folderWrittenCount: 0,
+        fatalError: null,
         songFailureErrors: new Map(),
 
         // State management
@@ -400,18 +402,37 @@ async function ml_verify_directory_writable(directoryHandle) {
     }
 
     const probeName = `.ml-write-test-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
+    let writable = null;
+    let fileCreated = false;
     try {
         const fileHandle = await directoryHandle.getFileHandle(probeName, { create: true });
-        const writable = await fileHandle.createWritable();
+        fileCreated = true;
+        writable = await fileHandle.createWritable();
         await writable.write('ok');
         await writable.close();
-        if (typeof directoryHandle.removeEntry === 'function') {
-            await directoryHandle.removeEntry(probeName);
-        }
+        writable = null;
         return true;
     } catch (error) {
         console.warn('Folder write probe failed:', error);
         return false;
+    } finally {
+        if (writable && typeof writable.abort === 'function') {
+            try {
+                await writable.abort();
+            } catch (abortError) {
+                console.warn('Failed to abort folder write probe:', abortError);
+            }
+        }
+
+        if (fileCreated && typeof directoryHandle.removeEntry === 'function') {
+            try {
+                await directoryHandle.removeEntry(probeName);
+            } catch (removeError) {
+                if (removeError?.name !== 'NotFoundError') {
+                    console.warn('Failed to remove folder write probe:', removeError);
+                }
+            }
+        }
     }
 }
 
@@ -773,12 +794,25 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
         try {
             fileName = await ml_get_unique_folder_file_name(task.folderHandle, musicFile.fileName, task.usedFileNames);
             await ml_write_data_to_folder(task.folderHandle, fileName, musicFile.data);
+            task.folderWrittenCount = (task.folderWrittenCount || 0) + 1;
         } catch (error) {
             if (!ml_is_folder_write_blocked_error(error)) {
                 if (fileName) {
                     task.usedFileNames.delete(fileName);
                 }
                 throw error;
+            }
+
+            if (task.folderWrittenCount > 0) {
+                if (fileName) {
+                    task.usedFileNames.delete(fileName);
+                }
+                const partialFolderError = new Error('Folder write permission was lost after files were written');
+                partialFolderError.name = 'FolderOutputBlockedError';
+                partialFolderError.mlPartialFolderOutput = true;
+                partialFolderError.mlFolderWriteStage = error.mlFolderWriteStage;
+                partialFolderError.cause = error;
+                throw partialFolderError;
             }
 
             task.outputMode = ML_COLLECTION_DOWNLOAD_MODE.ZIP;
@@ -838,7 +872,7 @@ async function ml_execute_batch_task(task) {
     task.completedCount = task.successCount;
     task.progress = (task.completedCount / task.totalCount) * 100;
 
-    while (songQueue.length > 0 && attempt < ml_max_try_times && task.status !== ML_TASK_STATUS.CANCELLED) {
+    while (songQueue.length > 0 && attempt < ml_max_try_times && task.status === ML_TASK_STATUS.ACTIVE && !task.fatalError) {
         if (attempt > 0) {
             console.log(`Task ${task.id}: Retry attempt ${attempt}, remaining: ${songQueue.length}`);
         }
@@ -847,7 +881,7 @@ async function ml_execute_batch_task(task) {
         const cancelledSongs = [];
 
         async function downloadNextSong() {
-            while (songQueue.length > 0 && task.status === ML_TASK_STATUS.ACTIVE && !task.isPaused) {
+            while (songQueue.length > 0 && task.status === ML_TASK_STATUS.ACTIVE && !task.isPaused && !task.fatalError) {
                 const song = songQueue.shift();
 
                 try {
@@ -888,6 +922,12 @@ async function ml_execute_batch_task(task) {
                         return;
                     }
 
+                    if (error?.mlPartialFolderOutput) {
+                        task.fatalError = error;
+                        currentRoundFailed.push(song);
+                        return;
+                    }
+
                     task.songFailureErrors.set(song, error);
                     if (ml_is_storage_io_error(error)) {
                         console.warn(`Task ${task.id}: browser storage failed during ${error.mlFolderWriteStage || 'file processing'}.`, error);
@@ -903,9 +943,15 @@ async function ml_execute_batch_task(task) {
             }
         }
 
-        const workerCount = Math.min(concurrentCount, songQueue.length);
+        const workerCount = task.outputMode === ML_COLLECTION_DOWNLOAD_MODE.FOLDER ?
+            1 : Math.min(concurrentCount, songQueue.length);
         const workers = Array.from({ length: workerCount }, () => downloadNextSong());
         await Promise.all(workers);
+
+        if (task.fatalError) {
+            songQueue = [...currentRoundFailed, ...songQueue];
+            break;
+        }
 
         if (task.status === ML_TASK_STATUS.CANCELLED) {
             task.generatedFiles = [];
@@ -934,6 +980,14 @@ async function ml_execute_batch_task(task) {
     task.completedCount = task.successCount + task.failedCount;
     task.progress = (task.completedCount / task.totalCount) * 100;
     task.remainingSongs = [];
+
+    if (task.fatalError?.mlPartialFolderOutput) {
+        ml_show_Alert(
+            '文件夹下载中断',
+            `已有 ${task.folderWrittenCount} 首歌曲写入文件夹，之后浏览器失去了文件夹写入权限。为避免生成不完整的ZIP，剩余 ${task.failedCount} 首歌曲未继续下载，请恢复权限后重新下载。`,
+            'error'
+        );
+    }
 
     const storageFailedSongs = ml_get_storage_failed_songs(task);
     if (storageFailedSongs.length > 0) {

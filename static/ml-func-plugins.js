@@ -15,6 +15,7 @@ const ML_AUDIO_FETCH_TIMEOUT_BY_LEVEL_MS = {
 };
 const ML_DEFAULT_AUDIO_FETCH_TIMEOUT_MS = 900000;
 const ML_BLOB_DOWNLOAD_HANDOFF_DELAY_MS = 10000;
+const ML_BLOB_DOWNLOAD_MAX_HANDOFF_DELAY_MS = 300000;
 const ML_BLOB_DOWNLOAD_FOCUS_SETTLE_MS = 1000;
 let ml_browser_download_slot = Promise.resolve();
 
@@ -852,12 +853,14 @@ function ml_wait_for_browser_download_handoff() {
     return new Promise(resolve => {
         let didBlur = false;
         let handoffTimer = null;
+        let maxHandoffTimer = null;
         let focusTimer = null;
 
         const cleanup = () => {
             window.removeEventListener('blur', handleBlur);
             window.removeEventListener('focus', handleFocus);
             clearTimeout(handoffTimer);
+            clearTimeout(maxHandoffTimer);
             clearTimeout(focusTimer);
         };
         const finish = () => {
@@ -867,6 +870,9 @@ function ml_wait_for_browser_download_handoff() {
         const handleBlur = () => {
             didBlur = true;
             clearTimeout(handoffTimer);
+            handoffTimer = null;
+            clearTimeout(focusTimer);
+            focusTimer = null;
         };
         const handleFocus = () => {
             if (didBlur && focusTimer === null) {
@@ -877,6 +883,7 @@ function ml_wait_for_browser_download_handoff() {
         window.addEventListener('blur', handleBlur);
         window.addEventListener('focus', handleFocus);
         handoffTimer = setTimeout(finish, ML_BLOB_DOWNLOAD_HANDOFF_DELAY_MS);
+        maxHandoffTimer = setTimeout(finish, ML_BLOB_DOWNLOAD_MAX_HANDOFF_DELAY_MS);
     });
 }
 
