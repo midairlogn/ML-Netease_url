@@ -55,6 +55,6 @@ class AppConfig:
         return []
 
 
-    VERSION = '1.2.3'
+    VERSION = '1.2.4'
 
 settings = AppConfig()
