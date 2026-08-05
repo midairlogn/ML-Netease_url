@@ -616,6 +616,20 @@ async function ml_write_data_to_folder(folderHandle, fileName, data) {
     }
 }
 
+async function ml_get_unique_folder_music_file_name(folderHandle, musicFile, usedFileNames) {
+    while (true) {
+        const fileName = await ml_get_unique_folder_file_name(folderHandle, musicFile.fileName, usedFileNames);
+        if (!musicFile.sidecarFile) return fileName;
+
+        const { base } = ml_split_file_name(fileName);
+        const sidecarName = ml_format_safe_file_name(base, '.lrc');
+        if (!usedFileNames.has(sidecarName) && !await ml_folder_file_exists(folderHandle, sidecarName)) {
+            usedFileNames.add(sidecarName);
+            return fileName;
+        }
+    }
+}
+
 function ml_create_zip_write_error(error, message) {
     const zipError = new Error(message);
     zipError.name = 'ZipWriteError';
@@ -672,8 +686,21 @@ async function ml_add_music_file_to_zip(task, musicFile) {
     try {
         await task.zipWriter.add(fileName, new zip.Uint8ArrayReader(data), { level: 0 });
         task.zipEntryCount++;
+
+        if (musicFile.sidecarFile) {
+            const { base } = ml_split_file_name(fileName);
+            const sidecarName = ml_format_safe_file_name(base, '.lrc');
+            task.usedFileNames.add(sidecarName);
+            const sidecarData = ArrayBuffer.isView(musicFile.sidecarFile.data) ?
+                new Uint8Array(musicFile.sidecarFile.data.buffer, musicFile.sidecarFile.data.byteOffset, musicFile.sidecarFile.data.byteLength) :
+                new Uint8Array(musicFile.sidecarFile.data);
+            await task.zipWriter.add(sidecarName, new zip.Uint8ArrayReader(sidecarData), { level: 0 });
+            task.zipEntryCount++;
+        }
     } catch (error) {
         task.usedFileNames.delete(fileName);
+        const { base } = ml_split_file_name(fileName);
+        task.usedFileNames.delete(ml_format_safe_file_name(base, '.lrc'));
         throw ml_create_zip_write_error(error, `Unable to write ${fileName} to the ZIP archive`);
     }
 }
@@ -983,13 +1010,34 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
 
         let fileName = null;
         try {
-            fileName = await ml_get_unique_folder_file_name(task.folderHandle, musicFile.fileName, task.usedFileNames);
+            fileName = await ml_get_unique_folder_music_file_name(task.folderHandle, musicFile, task.usedFileNames);
             await ml_write_data_to_folder(task.folderHandle, fileName, musicFile.data);
+            if (musicFile.sidecarFile) {
+                const { base } = ml_split_file_name(fileName);
+                const sidecarName = ml_format_safe_file_name(base, '.lrc');
+                try {
+                    await ml_write_data_to_folder(task.folderHandle, sidecarName, musicFile.sidecarFile.data);
+                } catch (error) {
+                    try {
+                        await task.folderHandle.removeEntry(fileName);
+                    } catch (removeError) {
+                        if (removeError?.name !== 'NotFoundError') {
+                            console.warn(`Failed to remove audio file after LRC write failed: ${fileName}`, removeError);
+                        }
+                    }
+                    throw error;
+                }
+            }
             task.folderWrittenCount = (task.folderWrittenCount || 0) + 1;
         } catch (error) {
+            const sidecarName = fileName && musicFile.sidecarFile ?
+                ml_format_safe_file_name(ml_split_file_name(fileName).base, '.lrc') : null;
             if (!ml_is_folder_write_blocked_error(error)) {
                 if (fileName) {
                     task.usedFileNames.delete(fileName);
+                }
+                if (sidecarName) {
+                    task.usedFileNames.delete(sidecarName);
                 }
                 throw error;
             }
@@ -997,6 +1045,9 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
             if (task.folderWrittenCount > 0) {
                 if (fileName) {
                     task.usedFileNames.delete(fileName);
+                }
+                if (sidecarName) {
+                    task.usedFileNames.delete(sidecarName);
                 }
                 const partialFolderError = new Error('Folder write permission was lost after files were written');
                 partialFolderError.name = 'FolderOutputBlockedError';
@@ -1011,7 +1062,14 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
             if (fileName) {
                 task.usedFileNames.delete(fileName);
             }
+            if (sidecarName) {
+                task.usedFileNames.delete(sidecarName);
+            }
             musicFile.fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
+            if (musicFile.sidecarFile) {
+                const { base } = ml_split_file_name(musicFile.fileName);
+                musicFile.sidecarFile.fileName = ml_format_safe_file_name(base, '.lrc');
+            }
             await ml_with_browser_download_slot(() => ml_trigger_built_music_file_download(musicFile));
 
             if (!task.folderFallbackNotified) {

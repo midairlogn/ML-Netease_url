@@ -29,6 +29,7 @@ function loadScripts(relativePaths, overrides = {}) {
         document: {},
         window: { addEventListener() {}, removeEventListener() {} },
         Blob,
+        TextEncoder,
         DOMException,
         AbortController,
         setTimeout,
@@ -299,6 +300,101 @@ test('MP3 building returns the ID3 writer buffer without allocating a Blob', asy
     assert.equal(musicFile.data, taggedData);
     assert.equal(musicFile.mimeType, 'audio/mpeg');
     assert.equal(musicFile.fileName, 'song_artist_album.mp3');
+});
+
+test('enabled external lyrics produce a UTF-8 LRC sidecar with the audio basename', () => {
+    const context = loadScript('static/ml-func-plugins.js', {
+        localStorage: {
+            getItem(key) {
+                return ['ml_metadata_write_enabled', 'ml_metadata_write_lyrics', 'ml_download_lrc_file'].includes(key) ? 'true' : null;
+            }
+        }
+    });
+    context.ml_normalize_lrc_ms = lyrics => lyrics.replace('[00:01.2]', '[00:01.200]');
+    context.ml_resolve_lrc_timestamp_conflicts = lyrics => lyrics;
+
+    const sidecar = context.ml_build_lrc_file('Song Name.flac', '[00:01.2]Hello');
+
+    assert.equal(sidecar.fileName, 'Song Name.lrc');
+    assert.equal(sidecar.mimeType, 'text/plain;charset=utf-8');
+    assert.equal(new TextDecoder().decode(sidecar.data), '[00:01.200]Hello');
+});
+
+test('external LRC requires metadata writing and embedded lyrics to be enabled', () => {
+    for (const disabledKey of ['ml_metadata_write_enabled', 'ml_metadata_write_lyrics']) {
+        const context = loadScript('static/ml-func-plugins.js', {
+            localStorage: {
+                getItem(key) {
+                    return key === disabledKey ? 'false' : 'true';
+                }
+            }
+        });
+
+        assert.equal(context.ml_build_lrc_file('song.mp3', '[00:01.000]Hello'), null);
+    }
+});
+
+test('browser output submits the LRC sidecar after its audio file', async () => {
+    const context = loadScript('static/ml-func-plugins.js');
+    const submittedFiles = [];
+    context.ml_trigger_blob_download = async (_blob, fileName) => submittedFiles.push(fileName);
+
+    await context.ml_trigger_built_music_file_download({
+        fileName: 'song.mp3',
+        mimeType: 'audio/mpeg',
+        data: new Uint8Array([1]),
+        sidecarFile: {
+            fileName: 'song.lrc',
+            mimeType: 'text/plain;charset=utf-8',
+            data: new TextEncoder().encode('lyrics')
+        }
+    });
+
+    assert.deepEqual(submittedFiles, ['song.mp3', 'song.lrc']);
+});
+
+test('ZIP output writes an enabled LRC sidecar beside its audio file', async () => {
+    const zippedFiles = [];
+    class FakeReader {
+        constructor(data) { this.data = data; }
+    }
+    const context = loadScript('static/ml-task-manager.js', {
+        zip: { Uint8ArrayReader: FakeReader }
+    });
+    const task = {
+        zipWriter: { async add(name) { zippedFiles.push(name); } },
+        zipEntryCount: 0,
+        usedFileNames: new Set()
+    };
+
+    await context.ml_add_music_file_to_zip(task, {
+        fileName: 'song.flac',
+        data: new Uint8Array([1]),
+        sidecarFile: { fileName: 'song.lrc', data: new TextEncoder().encode('lyrics') }
+    });
+
+    assert.deepEqual(zippedFiles, ['song.flac', 'song.lrc']);
+    assert.equal(task.zipEntryCount, 2);
+});
+
+test('folder naming gives audio and LRC sidecars the same available basename', async () => {
+    const existingFiles = new Set(['song.lrc']);
+    const context = loadScript('static/ml-task-manager.js');
+    const folderHandle = {
+        async getFileHandle(name) {
+            if (existingFiles.has(name)) return {};
+            throw new DOMException('Missing', 'NotFoundError');
+        }
+    };
+    const usedFileNames = new Set();
+
+    const fileName = await context.ml_get_unique_folder_music_file_name(folderHandle, {
+        fileName: 'song.flac',
+        sidecarFile: { fileName: 'song.lrc' }
+    }, usedFileNames);
+
+    assert.equal(fileName, 'song (2).flac');
+    assert.equal(usedFileNames.has('song (2).lrc'), true);
 });
 
 test('failed folder writes abort the writer, remove the partial file, and report the stage', async () => {

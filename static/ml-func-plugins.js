@@ -578,6 +578,23 @@ $(document).ready(function() {
 
 // ---------------------------------------------------------
 
+function ml_build_lrc_file(audioFileName, processedLyrics) {
+    const enabled = typeof localStorage !== 'undefined' &&
+        (localStorage.getItem('ml_metadata_write_enabled') ?? 'true') === 'true' &&
+        (localStorage.getItem('ml_metadata_write_lyrics') ?? 'true') === 'true' &&
+        localStorage.getItem('ml_download_lrc_file') === 'true';
+    if (!enabled || !processedLyrics) return null;
+
+    const dotIndex = audioFileName.lastIndexOf('.');
+    const baseName = dotIndex > 0 ? audioFileName.slice(0, dotIndex) : audioFileName;
+    const normalizedLyrics = ml_resolve_lrc_timestamp_conflicts(ml_normalize_lrc_ms(processedLyrics));
+    return {
+        data: new TextEncoder().encode(normalizedLyrics),
+        mimeType: 'text/plain;charset=utf-8',
+        fileName: `${baseName}.lrc`
+    };
+}
+
 // Build a tagged music file without deciding where it should be saved.
 async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
     try {
@@ -834,7 +851,8 @@ async function ml_build_music_file(al_name, ar_name, processedLyrics, name, pic,
         return {
             data: taggedData,
             mimeType: mimeType,
-            fileName: fileName
+            fileName: fileName,
+            sidecarFile: ml_build_lrc_file(fileName, processedLyrics)
         };
 
     } catch (error) {
@@ -911,6 +929,10 @@ async function ml_trigger_blob_download(blob, fileName) {
 async function ml_trigger_built_music_file_download(musicFile) {
     const blob = new Blob([musicFile.data], { type: musicFile.mimeType });
     await ml_trigger_blob_download(blob, musicFile.fileName);
+    if (musicFile.sidecarFile) {
+        const sidecarBlob = new Blob([musicFile.sidecarFile.data], { type: musicFile.sidecarFile.mimeType });
+        await ml_trigger_blob_download(sidecarBlob, musicFile.sidecarFile.fileName);
+    }
 }
 
 // 定义下载函数
