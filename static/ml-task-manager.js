@@ -616,6 +616,31 @@ async function ml_write_data_to_folder(folderHandle, fileName, data) {
     }
 }
 
+function ml_reserve_music_file_names(musicFile, usedFileNames) {
+    if (!musicFile.sidecarFile) {
+        musicFile.fileName = ml_get_unique_file_name(musicFile.fileName, usedFileNames);
+        return musicFile;
+    }
+
+    const safeName = ml_sanitize_file_name(musicFile.fileName) || 'music.mp3';
+    const { base, ext } = ml_split_file_name(safeName);
+    let index = 1;
+
+    while (true) {
+        const suffix = index === 1 ? '' : ` (${index})`;
+        const audioName = ml_format_safe_file_name(base, ext, suffix);
+        const sidecarName = ml_format_safe_file_name(base, '.lrc', suffix);
+        if (!usedFileNames.has(audioName) && !usedFileNames.has(sidecarName)) {
+            usedFileNames.add(audioName);
+            usedFileNames.add(sidecarName);
+            musicFile.fileName = audioName;
+            musicFile.sidecarFile.fileName = sidecarName;
+            return musicFile;
+        }
+        index++;
+    }
+}
+
 async function ml_get_unique_folder_music_file_name(folderHandle, musicFile, usedFileNames) {
     while (true) {
         const fileName = await ml_get_unique_folder_file_name(folderHandle, musicFile.fileName, usedFileNames);
@@ -678,7 +703,8 @@ async function ml_add_music_file_to_zip(task, musicFile) {
         throw ml_create_zip_write_error(null, 'Streaming ZIP writer is not initialized');
     }
 
-    const fileName = ml_get_unique_file_name(musicFile.fileName, task.usedFileNames);
+    ml_reserve_music_file_names(musicFile, task.usedFileNames);
+    const fileName = musicFile.fileName;
     const data = ArrayBuffer.isView(musicFile.data) ?
         new Uint8Array(musicFile.data.buffer, musicFile.data.byteOffset, musicFile.data.byteLength) :
         new Uint8Array(musicFile.data);
@@ -688,9 +714,7 @@ async function ml_add_music_file_to_zip(task, musicFile) {
         task.zipEntryCount++;
 
         if (musicFile.sidecarFile) {
-            const { base } = ml_split_file_name(fileName);
-            const sidecarName = ml_format_safe_file_name(base, '.lrc');
-            task.usedFileNames.add(sidecarName);
+            const sidecarName = musicFile.sidecarFile.fileName;
             const sidecarData = ArrayBuffer.isView(musicFile.sidecarFile.data) ?
                 new Uint8Array(musicFile.sidecarFile.data.buffer, musicFile.sidecarFile.data.byteOffset, musicFile.sidecarFile.data.byteLength) :
                 new Uint8Array(musicFile.sidecarFile.data);
@@ -938,7 +962,8 @@ async function ml_execute_single_task(task) {
                 task.level,
                 song.trackNumber,
                 song.totalTracks,
-                task.abortController ? task.abortController.signal : undefined
+                task.abortController ? task.abortController.signal : undefined,
+                task.usedFileNames
             );
 
             if (task.status === ML_TASK_STATUS.CANCELLED) return;
@@ -976,7 +1001,8 @@ async function ml_save_task_music_file(task, response, processedLyrics, song) {
             task.level,
             song.trackNumber,
             song.totalTracks,
-            task.abortController ? task.abortController.signal : undefined
+            task.abortController ? task.abortController.signal : undefined,
+            task.usedFileNames
         );
         return;
     }

@@ -936,10 +936,13 @@ async function ml_trigger_built_music_file_download(musicFile) {
 }
 
 // 定义下载函数
-async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null) {
+async function ml_music_download(al_name, ar_name, processedLyrics, name, pic, url, level = null, trackNumber = null, totalTracks = null, abortSignal = null, usedFileNames = null) {
     return ml_with_browser_download_slot(async () => {
         try {
             const musicFile = await ml_build_music_file(al_name, ar_name, processedLyrics, name, pic, url, level, trackNumber, totalTracks, abortSignal);
+            if (usedFileNames && typeof ml_reserve_music_file_names === 'function') {
+                ml_reserve_music_file_names(musicFile, usedFileNames);
+            }
             await ml_trigger_built_music_file_download(musicFile);
         } catch (error) {
             if (error?.name !== 'AbortError') {

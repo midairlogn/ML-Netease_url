@@ -377,6 +377,56 @@ test('ZIP output writes an enabled LRC sidecar beside its audio file', async () 
     assert.equal(task.zipEntryCount, 2);
 });
 
+test('mixed audio formats reserve matching unique LRC basenames', () => {
+    const context = loadScript('static/ml-task-manager.js');
+    const usedFileNames = new Set();
+    const flac = {
+        fileName: 'song.flac',
+        sidecarFile: { fileName: 'song.lrc' }
+    };
+    const mp3 = {
+        fileName: 'song.mp3',
+        sidecarFile: { fileName: 'song.lrc' }
+    };
+
+    context.ml_reserve_music_file_names(flac, usedFileNames);
+    context.ml_reserve_music_file_names(mp3, usedFileNames);
+
+    assert.equal(flac.fileName, 'song.flac');
+    assert.equal(flac.sidecarFile.fileName, 'song.lrc');
+    assert.equal(mp3.fileName, 'song (2).mp3');
+    assert.equal(mp3.sidecarFile.fileName, 'song (2).lrc');
+});
+
+test('browser batch downloads reserve audio and LRC names as pairs', async () => {
+    const context = loadScripts(['static/ml-func-plugins.js', 'static/ml-task-manager.js']);
+    const submittedFiles = [];
+    let format = 'flac';
+    context.ml_build_music_file = async () => ({
+        fileName: `song.${format}`,
+        mimeType: format === 'flac' ? 'audio/flac' : 'audio/mpeg',
+        data: new Uint8Array([1]),
+        sidecarFile: {
+            fileName: 'song.lrc',
+            mimeType: 'text/plain;charset=utf-8',
+            data: new TextEncoder().encode('lyrics')
+        }
+    });
+    context.ml_trigger_blob_download = async (_blob, fileName) => submittedFiles.push(fileName);
+    const usedFileNames = new Set();
+
+    await context.ml_music_download('', '', '', '', '', '', null, null, null, null, usedFileNames);
+    format = 'mp3';
+    await context.ml_music_download('', '', '', '', '', '', null, null, null, null, usedFileNames);
+
+    assert.deepEqual(submittedFiles, [
+        'song.flac',
+        'song.lrc',
+        'song (2).mp3',
+        'song (2).lrc'
+    ]);
+});
+
 test('folder naming gives audio and LRC sidecars the same available basename', async () => {
     const existingFiles = new Set(['song.lrc']);
     const context = loadScript('static/ml-task-manager.js');
